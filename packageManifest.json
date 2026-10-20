@@ -1,0 +1,36 @@
+{
+  "packageName": "Benoit Hubitat Custom Suite",
+  "author": "Benoit Tremblay",
+  "version": "1.0.0",
+  "minimumHEVersion": "2.3.0",
+  "dateReleased": "2026-10-20",
+  "apps": [
+    {
+      "id": "7a8b9c1d-2222-3333-4444-555566667777",
+      "name": "Gestionnaire Thermique (Delta T & Point de Rosée)",
+      "namespace": "custom",
+      "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/Thermal_Manager/ThermalManagerApp.groovy",
+      "required": true,
+      "oauth": false,
+      "primary": true
+    }
+    {
+      "id": "73b33491-d8ed-47f2-a9f6-475c4413232c",
+      "name": "Vérification de santé des appareils",
+      "namespace": "custom",
+      "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/device_health/verification-sante-appareils.groovy",
+      "required": true,
+      "oauth": false,
+      "primary": true
+    }
+  ],
+  "drivers": [
+    {
+      "id": "1d2c3b4a-7777-6666-5555-443322110000",
+      "name": "Voip.ms SMS Notifier",
+      "namespace": "custom",
+      "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/drivers/voip_sms_driver/voipms_sms_driver.groovy",
+      "required": false
+    }
+  ]
+}
