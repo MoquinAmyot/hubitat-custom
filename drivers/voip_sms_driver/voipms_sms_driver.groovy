@@ -1,5 +1,5 @@
 /**
- *  VoIP.ms SMS — driver de notification Hubitat (v3)
+ *  VoIP.ms SMS — driver de notification Hubitat (v3.1)
  *
  *  Apparaît comme un appareil avec la capacité « Notification ».
  *  - File d'attente : les messages ne partent jamais en rafale.
