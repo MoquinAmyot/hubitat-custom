@@ -1,7 +1,7 @@
 {
   "packageName": "Benoit Hubitat Custom Suite",
   "author": "Benoit Tremblay",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minimumHEVersion": "2.3.0",
   "dateReleased": "2026-10-20",
   "apps": [
@@ -19,6 +19,15 @@
       "name": "Vérification de santé des appareils",
       "namespace": "custom",
       "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/device_health/verification-sante-appareils.groovy",
+      "required": false,
+      "oauth": false,
+      "primary": false
+    },
+    {
+      "id": "9f8e7d6c-5555-4444-3333-222211110000",
+      "name": "Gestionnaire de Batteries Bas Niveau",
+      "namespace": "custom",
+      "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/battery_monitor/BatteryMonitorApp.groovy",
       "required": false,
       "oauth": false,
       "primary": false
