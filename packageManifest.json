@@ -13,7 +13,7 @@
       "required": true,
       "oauth": false,
       "primary": true
-    }
+    },
     {
       "id": "73b33491-d8ed-47f2-a9f6-475c4413232c",
       "name": "Vérification de santé des appareils",
