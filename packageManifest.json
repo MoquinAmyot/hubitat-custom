@@ -1,7 +1,7 @@
 {
   "packageName": "Benoit Hubitat Custom Suite",
   "author": "Benoit Tremblay",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "minimumHEVersion": "2.3.0",
   "dateReleased": "2026-10-20",
   "apps": [
@@ -13,6 +13,15 @@
       "required": false,
       "oauth": false,
       "primary": true
+    },
+    {
+      "id": "73b33491-d8ed-47f2-a9f6-475c4413232c",
+      "name": "Vérification de santé des appareils",
+      "namespace": "custom",
+      "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/device_health/verification-sante-appareils.groovy",
+      "required": false,
+      "oauth": false,
+      "primary": false
     }
   ],
   "drivers": [
