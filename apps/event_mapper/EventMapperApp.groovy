@@ -54,7 +54,7 @@ def textHandler(evt) {
     
     log.info("EventMapperApp a reçu le mot-clé : ${receivedValue}")
     
-    for (int i = 1; i <= 5; i++) {
+    for (int i = 1; i <= 25; i++) {
         def targetCode = settings."code_${i}"?.trim()?.toLowerCase()
         if (targetCode && targetCode == receivedValue) {
             def message = settings."sms_${i}"
