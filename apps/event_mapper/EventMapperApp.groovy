@@ -22,7 +22,7 @@ def mainPage() {
         section("2. Table de Correspondance par Mots-clés") {
             paragraph "Associez chaque mot-clé reçu (ex: arriere, sonnette, voiture) à un message texte et à une lumière à allumer."
             
-            for (int i = 1; i <= 5; i++) {
+            for (int i = 1; i <= 25; i++) {
                 input "code_${i}", "text", title: "Ligne ${i} - Mot-clé reçu (ex: arriere)", required: false, submitOnChange: true
                 if (settings."code_${i}") {
                     input "sms_${i}", "text", title: "   ↳ Message SMS associé", required: false
