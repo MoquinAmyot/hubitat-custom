@@ -31,6 +31,14 @@
       "required": false,
       "oauth": false,
       "primary": false
+    },
+{
+      "id": "eventMapperApp",
+      "name": "Mappeur d'Événements HTTP (SMS & Lumières)",
+      "namespace": "custom",
+      "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/event_mapper/EventMapperApp.groovy",
+      "required": false,
+      "description": "Permet de lier un point d'entrée Maker API unique (Virtual Text) à une table de correspondance pour envoyer des SMS et allumer des lumières."
     }
   ],
   "drivers": [
