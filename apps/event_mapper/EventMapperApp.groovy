@@ -2,7 +2,7 @@ definition(
     name: "Mappeur d'Événements HTTP (SMS & Lumières)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Reçoit des libellés textuels via un appareil virtuel, avec kill-switch et nombre de lignes dynamique.",
+    description: "Reçoit des libellés textuels via un appareil virtuel, avec conditions de kill-switch et modes par ligne.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -20,26 +20,23 @@ def mainPage() {
             input "smsDevice", "capability.notification", title: "Appareil de notification (Voip.ms SMS)", multiple: false, required: true
         }
         
-        section("2. Kill-Switch & Conditions d'exclusion") {
-            input "disableSwitch", "capability.switch", title: "Interrupteur de désactivation (ex: Mode Tonte)", required: false, multiple: false
-            input "disabledModes", "mode", title: "Modes Hubitat désactivant les alertes", required: false, multiple: true
-        }
-        
-        section("3. Paramètres d'affichage") {
+        section("2. Paramètres d'affichage") {
             input "numRows", "number", title: "Nombre de lignes de correspondance à afficher", required: true, defaultValue: 5, range: "1..*", submitOnChange: true
         }
         
         def maxRows = (settings.numRows != null) ? (settings.numRows as int) : 5
         if (maxRows < 1) maxRows = 1
 
-        section("4. Table de Correspondance par Mots-clés (${maxRows} active(s))") {
-            paragraph "Associez chaque mot-clé reçu à un message texte et à une lumière à allumer."
+        section("3. Table de Correspondance et Conditions (${maxRows} active(s))") {
+            paragraph "Associez chaque mot-clé reçu et définissez des conditions d'exclusion spécifiques pour chaque ligne."
             
             for (int i = 1; i <= maxRows; i++) {
-                input "code_${i}", "text", title: "Ligne ${i} - Mot-clé reçu", required: false, submitOnChange: true
+                input "code_${i}", "text", title: "Ligne ${i} - Mot-clé reçu (ex: arriere_personne)", required: false, submitOnChange: true
                 if (settings."code_${i}") {
                     input "sms_${i}", "text", title: "   ↳ Message SMS associé", required: false
                     input "light_${i}", "capability.switch", title: "   ↳ Lumière à allumer", required: false, multiple: false
+                    input "disableSwitch_${i}", "capability.switch", title: "   ↳ Interrupteur de kill-switch (ex: Tonte de pelouse)", required: false, multiple: false
+                    input "disabledModes_${i}", "mode", title: "   ↳ Modes désactivant cette ligne spécifique", required: false, multiple: true
                 }
             }
         }
@@ -62,16 +59,6 @@ def initialize() {
 }
 
 def textHandler(evt) {
-    if (disableSwitch && disableSwitch.currentValue("switch") == "on") {
-        log.info("EventMapperApp -> Événement ignoré : l'interrupteur de désactivation est actif.")
-        return
-    }
-    
-    if (disabledModes && disabledModes.contains(location.currentMode)) {
-        log.info("EventMapperApp -> Événement ignoré : le mode actuel '${location.currentMode}' est désactivé.")
-        return
-    }
-    
     def receivedValue = evt.value?.trim()?.toLowerCase()
     if (!receivedValue) return
     
@@ -81,17 +68,32 @@ def textHandler(evt) {
     for (int i = 1; i <= maxRows; i++) {
         def targetCode = settings."code_${i}"?.trim()?.toLowerCase()
         if (targetCode && targetCode == receivedValue) {
+            
+            // 1. Vérification du Kill-Switch spécifique à cette ligne
+            def lineSwitch = settings."disableSwitch_${i}"
+            if (lineSwitch && lineSwitch.currentValue("switch") == "on") {
+                log.info("EventMapperApp -> Ligne ${i} ignorée : l'interrupteur de désactivation est actif.")
+                return
+            }
+            
+            // 2. Vérification des Modes spécifiques à cette ligne
+            def lineModes = settings."disabledModes_${i}"
+            if (lineModes && lineModes.contains(location.currentMode)) {
+                log.info("EventMapperApp -> Ligne ${i} ignorée : le mode actuel '${location.currentMode}' est exclu pour cette ligne.")
+                return
+            }
+            
             def message = settings."sms_${i}"
             def targetLight = settings."light_${i}"
             
             if (message && smsDevice) {
                 smsDevice.deviceNotification(message)
-                log.info("EventMapperApp -> SMS envoyé : ${message}")
+                log.info("EventMapperApp -> SMS envoyé (Ligne ${i}) : ${message}")
             }
             
             if (targetLight) {
                 targetLight.on()
-                log.info("EventMapperApp -> Lumière allumée : ${targetLight.displayName}")
+                log.info("EventMapperApp -> Lumière allumée (Ligne ${i}) : ${targetLight.displayName}")
             }
             return
         }
