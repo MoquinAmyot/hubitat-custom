@@ -1,7 +1,7 @@
 {
   "packageName": "Benoit Hubitat Custom Suite",
   "author": "Benoit Tremblay",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "minimumHEVersion": "2.3.0",
   "dateReleased": "2026-10-20",
   "apps": [
@@ -10,7 +10,7 @@
       "name": "Gestionnaire Thermique (Delta T & Point de Rosée)",
       "namespace": "custom",
       "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/Thermal_Manager/ThermalManagerApp.groovy",
-      "required": false,
+      "required": true,
       "oauth": false,
       "primary": true
     },
@@ -19,7 +19,7 @@
       "name": "Vérification de santé des appareils",
       "namespace": "custom",
       "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/device_health/verification-sante-appareils.groovy",
-      "required": false,
+      "required": true,
       "oauth": false,
       "primary": false
     },
@@ -28,7 +28,7 @@
       "name": "Gestionnaire de Batteries Bas Niveau",
       "namespace": "custom",
       "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/battery_monitor/BatteryMonitorApp.groovy",
-      "required": false,
+      "required": true,
       "oauth": false,
       "primary": false
     },
@@ -37,7 +37,7 @@
       "name": "Mappeur d'Événements HTTP (SMS & Lumières)",
       "namespace": "custom",
       "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/event_mapper/EventMapperApp.groovy",
-      "required": false,
+      "required": true,
       "description": "Permet de lier un point d'entrée Maker API unique (Virtual Text) à une table de correspondance pour envoyer des SMS et allumer des lumières."
     }
   ],
@@ -47,7 +47,7 @@
       "name": "Voip.ms SMS Notifier",
       "namespace": "custom",
       "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/drivers/voip_sms_driver/voipms_sms_driver.groovy",
-      "required": false
+      "required": true
     },
 {
       "id": "virtualTextDeviceben",
