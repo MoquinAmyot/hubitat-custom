@@ -1,7 +1,7 @@
 {
   "packageName": "Benoit Hubitat Custom Suite",
   "author": "Benoit Tremblay",
-  "version": "1.0.23",
+  "version": "1.0.24",
   "minimumHEVersion": "2.3.0",
   "dateReleased": "2026-10-20",
   "apps": [
@@ -39,7 +39,16 @@
       "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/event_mapper/EventMapperApp.groovy",
       "required": true,
       "description": "Permet de lier un point d'entrée Maker API unique (Virtual Text) à une table de correspondance pour envoyer des SMS et allumer des lumières."
-    }
+    },
+    {
+            "id": "device-state-monitor-app",
+            "name": "Moniteur d'État des Appareils (SMS)",
+            "namespace": "custom",
+            "author": "Benoit Tremblay",
+            "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/device_state_monitor/DeviceStateMonitorApp.groovy",
+            "required": true,
+            "description": "Surveille une sélection d'appareils et envoie un SMS via Voip.ms à chaque changement d'état."
+        }
   ],
   "drivers": [
     {
