@@ -50,7 +50,7 @@
       "required": false
     },
 {
-      "id": "virtualTextDevice",
+      "id": "virtualTextDeviceben",
       "name": "Virtual Text Device",
       "namespace": "custom",
       "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/drivers/virtual_text_device/Virtual_Text_Device.groovy",
