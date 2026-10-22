@@ -1,14 +1,18 @@
 metadata {
     definition (name: "Virtual Text Device", namespace: "custom", author: "Benoit Tremblay") {
         capability "Actuator"
-        capability "Sensor"
         attribute "text", "string"
-        command "setText", ["string"]
+        command "setText", [[name: "Text", type: "STRING"]]
     }
 }
 
-def setText(val) {
-    sendEvent(name: "text", value: val)
-    log.info("VirtualTextDevice -> Texte mis à jour : ${val}")
+def installed() {
 }
 
+def updated() {
+}
+
+def setText(String val) {
+    sendEvent(name: "text", value: val)
+    log.info "VirtualTextDevice -> Texte mis à jour : ${val}"
+}
