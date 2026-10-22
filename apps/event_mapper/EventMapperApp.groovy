@@ -2,7 +2,7 @@ definition(
     name: "Mappeur d'Événements HTTP (SMS & Lumières)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Reçoit des libellés textuels via un appareil virtuel, avec kill-switch et nombre de lignes dynamique illimité.",
+    description: "Reçoit des libellés textuels via un appareil virtuel, avec kill-switch et nombre de lignes dynamique.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -36,29 +36,16 @@ def mainPage() {
             paragraph "Associez chaque mot-clé reçu à un message texte et à une lumière à allumer."
             
             for (int i = 1; i <= maxRows; i++) {
-                def currentCode = settings."code_${i}"
-                
-                href(name: "lineDetail_${i}", title: currentCode ? "Ligne ${i} : ${currentCode}" : "Ligne ${i} (Vide - Cliquer pour configurer)", page: "rowConfigPage", params: [row: i], description: currentCode ? "SMS: ${settings.'sms_' + i ?: 'Aucun'}" : "Configurer ce déclencheur", state: currentCode ? "complete" : null)
+                input "code_${i}", "text", title: "Ligne ${i} - Mot-clé reçu", required: false, submitOnChange: true
+                if (settings."code_${i}") {
+                    input "sms_${i}", "text", title: "   ↳ Message SMS associé", required: false
+                    input "light_${i}", "capability.switch", title: "   ↳ Lumière à allumer", required: false, multiple: false
+                }
             }
         }
     }
 }
 
-def rowConfigPage(params) {
-    // Sécurisation au cas où params ou params.row serait null lors d'un rechargement
-    def row = 1
-    if (params != null && params.row != null) {
-        row = params.row as int
-    }
-    
-    dynamicPage(name: "rowConfigPage", title: "Configuration de la Ligne ${row}", install: false, uninstall: false, nextPage: "mainPage") {
-        section("Paramètres du déclencheur ${row}") {
-            input "code_${row}", "text", title: "Mot-clé reçu (ex: avant_personne)", required: false, submitOnChange: true
-            input "sms_${row}", "text", title: "Message SMS associé", required: false
-            input "light_${row}", "capability.switch", title: "Lumière à allumer", required: false, multiple: false
-        }
-    }
-}
 def installed() {
     initialize()
 }
