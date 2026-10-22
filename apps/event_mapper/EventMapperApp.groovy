@@ -45,7 +45,12 @@ def mainPage() {
 }
 
 def rowConfigPage(params) {
-    def row = params.row as int
+    // Sécurisation au cas où params ou params.row serait null lors d'un rechargement
+    def row = 1
+    if (params != null && params.row != null) {
+        row = params.row as int
+    }
+    
     dynamicPage(name: "rowConfigPage", title: "Configuration de la Ligne ${row}", install: false, uninstall: false, nextPage: "mainPage") {
         section("Paramètres du déclencheur ${row}") {
             input "code_${row}", "text", title: "Mot-clé reçu (ex: avant_personne)", required: false, submitOnChange: true
@@ -54,7 +59,6 @@ def rowConfigPage(params) {
         }
     }
 }
-
 def installed() {
     initialize()
 }
