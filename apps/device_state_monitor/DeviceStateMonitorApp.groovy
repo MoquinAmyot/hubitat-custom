@@ -1,8 +1,8 @@
 definition(
-    name: "Moniteur d'État des Appareils (SMS)",
+    name: "Moniteur d'État des Appareils et Modes (SMS)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Surveille une sélection d'appareils et envoie un SMS via Voip.ms à chaque changement d'état.",
+    description: "Surveille une sélection d'appareils et les changements de mode du hub, avec notifications SMS via Voip.ms.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -13,14 +13,18 @@ preferences {
 }
 
 def mainPage() {
-    dynamicPage(name: "mainPage", title: "Configuration du Moniteur d'Appareils", install: true, uninstall: true) {
+    dynamicPage(name: "mainPage", title: "Configuration du Moniteur", install: true, uninstall: true) {
         
         section("1. Notification") {
             input "smsDevice", "capability.notification", title: "Appareil de notification (Voip.ms SMS)", multiple: false, required: true
         }
         
-        section("2. Appareils à surveiller") {
-            input "monitoredDevices", "capability.actuator", title: "Sélectionnez les appareils à surveiller", multiple: true, required: true, submitOnChange: true
+        section("2. Options de surveillance") {
+            input "monitorModes", "bool", title: "Surveiller les changements de mode du hub ?", defaultValue: true, submitOnChange: true
+        }
+        
+        section("3. Appareils à surveiller") {
+            input "monitoredDevices", "capability.actuator", title: "Sélectionnez les appareils à surveiller", multiple: true, required: false, submitOnChange: true
         }
     }
 }
@@ -36,16 +40,23 @@ def updated() {
 
 def initialize() {
     unsubscribe()
+    
+    // Abonnement aux appareils sélectionnés
     if (monitoredDevices) {
-        // S'abonne à tous les types d'événements (switch, presence, motion, level, etc.) pour les appareils choisis
         subscribe(monitoredDevices, "switch", deviceHandler)
         subscribe(monitoredDevices, "presence", deviceHandler)
         subscribe(monitoredDevices, "motion", deviceHandler)
         subscribe(monitoredDevices, "contact", deviceHandler)
         subscribe(monitoredDevices, "battery", deviceHandler)
         subscribe(monitoredDevices, "level", deviceHandler)
-        log.info("DeviceStateMonitor initialisé pour ${monitoredDevices.size()} appareil(s).")
     }
+    
+    // Abonnement aux changements de mode du hub si l'option est activée
+    if (monitorModes) {
+        subscribe(location, "mode", modeHandler)
+    }
+    
+    log.info("DeviceStateMonitor initialisé (Modes surveillés: ${monitorModes}, Appareils: ${monitoredDevices ? monitoredDevices.size() : 0}).")
 }
 
 def deviceHandler(evt) {
@@ -53,9 +64,17 @@ def deviceHandler(evt) {
     def attrName = evt.name
     def attrValue = evt.value
     
-    // Construction du message de notification
     def message = "[Monitor] ${deviceName} : ${attrName} -> ${attrValue}"
-    
+    sendSms(message)
+}
+
+def modeHandler(evt) {
+    def newMode = evt.value
+    def message = "[Monitor] Mode du Hub -> ${newMode}"
+    sendSms(message)
+}
+
+def sendSms(message) {
     if (smsDevice) {
         smsDevice.deviceNotification(message)
         log.info("DeviceStateMonitor -> SMS envoyé : ${message}")
