@@ -24,8 +24,8 @@ def mainPage() {
         }
         
         section("3. Appareils à surveiller") {
-            // Changé en "capability.tracking" ou simplement "capability.*" / sélection large pour accepter les virtuels
-            input "monitoredDevices", "capability.sensed", title: "Sélectionnez les appareils à surveiller (Virtuels / Physiques)", multiple: true, required: false, submitOnChange: true
+            // "capability.*" permet d'afficher TOUS les appareils du hub (physiques et virtuels)
+            input "monitoredDevices", "capability.*", title: "Sélectionnez les appareils à surveiller (Virtuels / Physiques)", multiple: true, required: false, submitOnChange: true
         }
     }
 }
@@ -42,10 +42,8 @@ def updated() {
 def initialize() {
     unsubscribe()
     
-    // S'abonne à TOUS les événements ("*") de chaque appareil sélectionné, qu'il soit virtuel ou physique
+    // S'abonne dynamiquement à tous les attributs supportés par chaque appareil choisi
     if (monitoredDevices) {
-        subscribe(monitoredDevices, "expression", deviceHandler) // Attribut universel ou joker selon l'API Hubitat
-        // Alternative plus large pour capturer tous les attributs sans filtre :
         monitoredDevices.each { dev ->
             dev.supportedAttributes.each { attr ->
                 subscribe(dev, attr.name, deviceHandler)
