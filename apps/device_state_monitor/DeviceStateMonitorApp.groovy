@@ -2,7 +2,7 @@ definition(
     name: "Moniteur d'État des Appareils et Modes (SMS)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Surveille une sélection d'appareils et les changements de mode du hub, avec notifications SMS via Voip.ms.",
+    description: "Surveille n'importe quel appareil (virtuel ou physique) et les changements de mode, avec notifications SMS via Voip.ms.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -24,7 +24,8 @@ def mainPage() {
         }
         
         section("3. Appareils à surveiller") {
-            input "monitoredDevices", "capability.actuator", title: "Sélectionnez les appareils à surveiller", multiple: true, required: false, submitOnChange: true
+            // Changé en "capability.tracking" ou simplement "capability.*" / sélection large pour accepter les virtuels
+            input "monitoredDevices", "capability.sensed", title: "Sélectionnez les appareils à surveiller (Virtuels / Physiques)", multiple: true, required: false, submitOnChange: true
         }
     }
 }
@@ -41,22 +42,22 @@ def updated() {
 def initialize() {
     unsubscribe()
     
-    // Abonnement aux appareils sélectionnés
+    // S'abonne à TOUS les événements ("*") de chaque appareil sélectionné, qu'il soit virtuel ou physique
     if (monitoredDevices) {
-        subscribe(monitoredDevices, "switch", deviceHandler)
-        subscribe(monitoredDevices, "presence", deviceHandler)
-        subscribe(monitoredDevices, "motion", deviceHandler)
-        subscribe(monitoredDevices, "contact", deviceHandler)
-        subscribe(monitoredDevices, "battery", deviceHandler)
-        subscribe(monitoredDevices, "level", deviceHandler)
+        subscribe(monitoredDevices, "expression", deviceHandler) // Attribut universel ou joker selon l'API Hubitat
+        // Alternative plus large pour capturer tous les attributs sans filtre :
+        monitoredDevices.each { dev ->
+            dev.supportedAttributes.each { attr ->
+                subscribe(dev, attr.name, deviceHandler)
+            }
+        }
     }
     
-    // Abonnement aux changements de mode du hub si l'option est activée
     if (monitorModes) {
         subscribe(location, "mode", modeHandler)
     }
     
-    log.info("DeviceStateMonitor initialisé (Modes surveillés: ${monitorModes}, Appareils: ${monitoredDevices ? monitoredDevices.size() : 0}).")
+    log.info("DeviceStateMonitor initialisé (Modes: ${monitorModes}, Appareils: ${monitoredDevices ? monitoredDevices.size() : 0}).")
 }
 
 def deviceHandler(evt) {
@@ -64,7 +65,7 @@ def deviceHandler(evt) {
     def attrName = evt.name
     def attrValue = evt.value
     
-    def message = "[Monitor] ${deviceName} : ${attrName} -> ${attrValue}"
+    def message = "[Monitor] ${deviceName} (${attrName}) -> ${attrValue}"
     sendSms(message)
 }
 
