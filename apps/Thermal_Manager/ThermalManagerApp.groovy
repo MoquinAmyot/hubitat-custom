@@ -1,8 +1,8 @@
 definition(
-    name: "Gestionnaire Thermique (Delta T, Rosée & Présence Individualisée)",
+    name: "Gestionnaire Thermique (Delta T, Rosée & Présence 4 Membres)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Analyse Delta T et Point de rosée avec exclusion des capteurs HS, contrôle ventilateur, et routage des SMS de notification selon la présence de chaque membre de la famille.",
+    description: "Analyse Delta T et Point de rosée avec exclusion des capteurs HS, contrôle ventilateur, et routage des SMS pour 4 membres de la famille.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -50,23 +50,24 @@ def mainPage() {
             input "indoorHumSensors", "capability.relativeHumidityMeasurement", title: "Capteurs d'Humidité intérieurs", required: false, multiple: true
         }
 
-        section("3. Gestion de la Famille & Routage SMS par Présence") {
-            paragraph "Associez chaque membre de son capteur de présence (ex: OwnTracks) à son propre pilote Voip.ms :"
+        section("3. Gestion de la Famille (4 Membres) & Routage SMS") {
+            paragraph "Associez chaque membre à son capteur de présence et à son pilote Voip.ms :"
             
-            // Membre 1 (ex: Benoit)
-            paragraph "<b>Membre 1</b>"
-            input "pres1", "capability.presenceSensor", title: "Capteur de présence (Benoit)", required: false, multiple: false
-            input "sms1", "capability.notification", title: "Pilote SMS Voip.ms (Benoit)", required: false, multiple: false
+            paragraph "<b>Membre 1 (Principal)</b>"
+            input "pres1", "capability.presenceSensor", title: "Capteur de présence (Benoit)", required: true, multiple: false
+            input "sms1", "capability.notification", title: "Pilote SMS Voip.ms (Benoit)", required: true, multiple: false
             
-            // Membre 2 (ex: Nancy)
-            paragraph "<b>Membre 2</b>"
-            input "pres2", "capability.presenceSensor", title: "Capteur de présence (Nancy)", required: false, multiple: false
-            input "sms2", "capability.notification", title: "Pilote SMS Voip.ms (Nancy)", required: false, multiple: false
+            paragraph "<b>Membre 2 (Optionnel)</b>"
+            input "pres2", "capability.presenceSensor", title: "Capteur de présence", required: false, multiple: false
+            input "sms2", "capability.notification", title: "Pilote SMS Voip.ms", required: false, multiple: false
             
-            // Membre 3 (optionnel)
             paragraph "<b>Membre 3 (Optionnel)</b>"
-            input "pres3", "capability.presenceSensor", title: "Capteur de présence (Autre)", required: false, multiple: false
-            input "sms3", "capability.notification", title: "Pilote SMS Voip.ms (Autre)", required: false, multiple: false
+            input "pres3", "capability.presenceSensor", title: "Capteur de présence", required: false, multiple: false
+            input "sms3", "capability.notification", title: "Pilote SMS Voip.ms", required: false, multiple: false
+
+            paragraph "<b>Membre 4 (Optionnel)</b>"
+            input "pres4", "capability.presenceSensor", title: "Capteur de présence", required: false, multiple: false
+            input "sms4", "capability.notification", title: "Pilote SMS Voip.ms", required: false, multiple: false
         }
         
         section("4. Sécurité & Exclusion automatique des capteurs HS") {
@@ -89,10 +90,10 @@ def mainPage() {
             input "contactSensors", "capability.contactSensor", title: "Capteurs de fenêtres (N'active le ventilateur que si une fenêtre est ouverte)", required: false, multiple: true
         }
 
-        section("7. Paramètres de Notification SMS") {
+        section("7. Paramètres de Notification SMS & Fréquence") {
             input "allowedModes", "mode", title: "Modes autorisés pour les SMS (laisser vide = tous)", required: false, multiple: true
-            input "minMinutesBetweenSms", "number", title: "Délai minimal entre deux SMS (minutes)", defaultValue: 120, required: true
-            input "evalIntervalMinutes", "enum", options: ["5": "5 min", "10": "10 min", "15": "15 min", "30": "30 min"], defaultValue: "15", required: true
+            input "minMinutesBetweenSms", "number", title: "Délai minimal entre deux SMS (Anti-spam en minutes)", defaultValue: 120, required: true
+            input "evalIntervalMinutes", "enum", title: "Fréquence d'évaluation (Intervalle en minutes)", options: ["5": "5 min", "10": "10 min", "15": "15 min", "30": "30 min"], defaultValue: "15", required: true
             input "runEvalNow", "bool", title: "Forcer une évaluation immédiate", defaultValue: false, submitOnChange: true
         }
 
@@ -119,10 +120,10 @@ def initialize() {
     if (indoorHumSensors) subscribe(indoorHumSensors, "humidity", eventHandler)
     if (contactSensors) subscribe(contactSensors, "contact", eventHandler)
     
-    // Abonnements dynamiques à la présence de chaque membre configuré
     if (pres1) subscribe(pres1, "presence", eventHandler)
     if (pres2) subscribe(pres2, "presence", eventHandler)
     if (pres3) subscribe(pres3, "presence", eventHandler)
+    if (pres4) subscribe(pres4, "presence", eventHandler)
 
     String interval = settings.evalIntervalMinutes ?: "15"
     if (interval == "5") runEvery5Minutes(evaluateThermalConditions)
@@ -131,36 +132,17 @@ def initialize() {
     else runEvery15Minutes(evaluateThermalConditions)
 
     evaluateThermalConditions()
-    log.info "[ThermalManager] Initialisé avec succès (Présence individualisée)."
+    log.info "[ThermalManager] Initialisé avec succès (4 membres)."
 }
 
 def eventHandler(evt) { evaluateThermalConditions() }
 
-// Retourne la liste unique des pilotes SMS Voip.ms dont le propriétaire est actuellement présent
 List getActiveSmsDevices() {
     List activeSms = []
-    
-    // Membre 1
-    if (sms1) {
-        if (!pres1 || pres1.currentValue("presence") == "present") {
-            activeSms << sms1
-        }
-    }
-    
-    // Membre 2
-    if (sms2) {
-        if (!pres2 || pres2.currentValue("presence") == "present") {
-            activeSms << sms2
-        }
-    }
-    
-    // Membre 3
-    if (sms3) {
-        if (!pres3 || pres3.currentValue("presence") == "present") {
-            activeSms << sms3
-        }
-    }
-    
+    if (sms1 && (!pres1 || pres1.currentValue("presence") == "present")) activeSms << sms1
+    if (sms2 && pres2 && pres2.currentValue("presence") == "present") activeSms << sms2
+    if (sms3 && pres3 && pres3.currentValue("presence") == "present") activeSms << sms3
+    if (sms4 && pres4 && pres4.currentValue("presence") == "present") activeSms << sms4
     return activeSms.unique()
 }
 
@@ -321,7 +303,6 @@ def sendTargetedSms(String message) {
     long lastSent = state.lastSmsTimestamp ?: 0L
 
     if ((now() - lastSent) >= minWaitMs) {
-        // Envoie le texto uniquement au pilote Voip.ms de la ou des personnes présentes
         activeSms.each { smsDev ->
             smsDev.deviceNotification(message)
         }
