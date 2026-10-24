@@ -1,7 +1,7 @@
 I{
   "packageName": "Benoit Hubitat Custom Suite",
   "author": "Benoit Tremblay",
-  "version": "1.0.29",
+  "version": "1.0.30",
   "minimumHEVersion": "2.3.0",
   "dateReleased": "2026-10-20",
   "apps": [
@@ -55,7 +55,7 @@ I{
             "namespace": "custom",
             "author": "Benoit Tremblay",
             "location": "https://raw.githubusercontent.com/VOTRE_NOM_GITHUB/REPO_NAME/main/apps/LightingDataLoggerApp/LightingDataLoggerApp.groovy",
-            "required": false,
+            "required": true,
             "description": "Enregistre l'heure, les Lux Hue et l'état des 7 switches (Avant/Arrière) vers Google Forms (Google Sheets) et/ou fichier CSV local."
         }
   ],
