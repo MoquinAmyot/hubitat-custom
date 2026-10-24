@@ -1,8 +1,8 @@
 definition(
-    name: "Gestionnaire Thermique (Delta T, Rosée & Présence 4 Membres)",
+    name: "Gestionnaire Thermique (Delta T, Rosée, 4 Membres & Offsets)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Analyse Delta T et Point de rosée avec exclusion des capteurs HS, contrôle ventilateur, et routage des SMS pour 4 membres de la famille.",
+    description: "Analyse Delta T et Point de rosée avec gestion d'offsets par capteur, exclusion des capteurs HS, contrôle ventilateur, et routage des SMS.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -26,7 +26,7 @@ def mainPage() {
                     List activeRecipients = getActiveSmsDevices()
                     
                     String statusHtml = "<b>Intérieur (Moyenne sur ${ind.activeCount} capteur(s)) :</b> ${ind.temperature} °C | Humidité : ${ind.humidity} % | Point de rosée : <b>${ind.dewPoint} °C</b><br>"
-                    statusHtml += "<small>Détail capteurs : ${ind.detailsSummary}</small><br>"
+                    statusHtml += "<small>Détail capteurs (avec offsets) : ${ind.detailsSummary}</small><br>"
                     statusHtml += "<b>Extérieur (${settings.outdoorWeather.displayName}) :</b> ${ext.temperature} °C | Humidité : ${ext.humidity ?: 'N/A'} % | Point de rosée : <b>${ext.dewPoint} °C</b> (${ext.dewSource})<br>"
                     statusHtml += "<b>Écarts (Int - Ext) :</b> Delta T = <b>${deltaT} °C</b> | Delta Point de rosée = <b>${deltaDew} °C</b><br>"
                     statusHtml += "<b>Destinataires SMS actifs (Présents) :</b> <span style='color:${activeRecipients ? 'green' : 'orange'}; font-weight:bold;'>${activeRecipients ? activeRecipients.size() + ' personne(s) à la maison' : 'Personne (SMS suspendus)'}</span><br>"
@@ -46,9 +46,17 @@ def mainPage() {
             input "outdoorWeather", "capability.temperatureMeasurement", title: "Dispositif Météo Extérieur (ex: Meteo2)", required: true, multiple: false
         }
         
-        section("2. Capteurs Intérieurs") {
+        section("2. Capteurs Intérieurs & Offsets de Calibrage") {
             input "indoorTempSensors", "capability.temperatureMeasurement", title: "Capteurs de Température intérieurs", required: true, multiple: true
             input "indoorHumSensors", "capability.relativeHumidityMeasurement", title: "Capteurs d'Humidité intérieurs", required: false, multiple: true
+            
+            paragraph "<b>Ajustement des Offsets (Calibrage en option) :</b><br>Entrez les corrections à appliquer (ex: +0.5 ou -0.8)"
+            input "offsetTemp1", "decimal", title: "Offset Température Capteur 1 (°C)", required: false, defaultValue: 0.0
+            input "offsetHum1", "decimal", title: "Offset Humidité Capteur 1 (%)", required: false, defaultValue: 0.0
+            input "offsetTemp2", "decimal", title: "Offset Température Capteur 2 (°C)", required: false, defaultValue: 0.0
+            input "offsetHum2", "decimal", title: "Offset Humidité Capteur 2 (%)", required: false, defaultValue: 0.0
+            input "offsetTemp3", "decimal", title: "Offset Température Capteur 3 (°C)", required: false, defaultValue: 0.0
+            input "offsetHum3", "decimal", title: "Offset Humidité Capteur 3 (%)", required: false, defaultValue: 0.0
         }
 
         section("3. Gestion de la Famille (4 Membres) & Routage SMS") {
@@ -101,7 +109,7 @@ def mainPage() {
         if (settings.runEvalNow) {
             app.updateSetting("runEvalNow", [value: "false", type: "bool"])
             evaluateThermalConditions()
-            section { paragraph "<span style='color:green;'>✓ Évaluation exécutée avec succès ! Consultez les logs pour voir le détail des capteurs (Temp & Humidité).</span>" }
+            section { paragraph "<span style='color:green;'>✓ Évaluation exécutée avec succès ! Consultez les logs pour voir les valeurs corrigées par les offsets.</span>" }
         }
     }
 }
@@ -133,7 +141,7 @@ def initialize() {
     else runEvery15Minutes(evaluateThermalConditions)
 
     evaluateThermalConditions()
-    log.info "[ThermalManager] Initialisé avec succès (4 membres)."
+    log.info "[ThermalManager] Initialisé avec succès (avec Offsets)."
 }
 
 def eventHandler(evt) { evaluateThermalConditions() }
@@ -158,7 +166,7 @@ def evaluateThermalConditions() {
 
     log.info "[ThermalManager] --- Évaluation Thermique ---"
     log.info "[ThermalManager] Extérieur (${settings.outdoorWeather.displayName}) -> Temp: ${ext.temperature}°C, Hum: ${ext.humidity}%, Point de rosée: ${ext.dewPoint}°C"
-    log.info "[ThermalManager] Intérieur (Moyenne Temp: ${ind.temperature}°C, Hum: ${ind.humidity}%, PR: ${ind.dewPoint}°C) | Détails: ${ind.detailsSummary}"
+    log.info "[ThermalManager] Intérieur (Moyenne Temp: ${ind.temperature}°C, Hum: ${ind.humidity}%, PR: ${ind.dewPoint}°C) | Détails (Corrigés): ${ind.detailsSummary}"
     if (ind.excludedNames) {
         log.warn "[ThermalManager] Capteurs intérieurs exclus/muets : ${ind.excludedNames.join(', ')}"
     }
@@ -258,27 +266,37 @@ Map getIndoorAverageData(tempSensors, humSensors) {
     List<String> excluded = []
     List<String> sensorDetails = []
 
-    // Associe chaque capteur à sa température et son humidité individuelle pour les logs
-    tempSensors?.each { dev ->
+    tempSensors?.eachWithIndex { dev, index ->
         if (isDeviceResponsive(dev, maxHours) && dev.currentValue("temperature") != null) {
-            BigDecimal t = dev.currentValue("temperature") as BigDecimal
-            if (t >= 5.0 && t <= 45.0) {
-                validTemps << t
-                // Cherche l'humidité correspondante sur le même appareil s'il l'offre, sinon cherche dans humSensors
-                def hVal = dev.hasAttribute("humidity") ? dev.currentValue("humidity") : null
-                String humStr = hVal != null ? " (${hVal}%)" : ""
-                sensorDetails << "${dev.displayName}: ${t}°C${humStr}"
+            BigDecimal rawT = dev.currentValue("temperature") as BigDecimal
+            
+            // Applique l'offset spécifique selon l'ordre du capteur (1, 2 ou 3)
+            BigDecimal tempOffset = 0.0
+            if (index == 0) tempOffset = (settings.offsetTemp1 ?: 0.0) as BigDecimal
+            else if (index == 1) tempOffset = (settings.offsetTemp2 ?: 0.0) as BigDecimal
+            else if (index == 2) tempOffset = (settings.offsetTemp3 ?: 0.0) as BigDecimal
+            
+            BigDecimal adjustedT = (rawT + tempOffset).setScale(2, BigDecimal.ROUND_HALF_UP)
+
+            if (adjustedT >= 5.0 && adjustedT <= 45.0) {
+                validTemps << adjustedT
+                
+                def rawH = dev.hasAttribute("humidity") ? dev.currentValue("humidity") : null
+                BigDecimal humOffset = 0.0
+                if (index == 0) humOffset = (settings.offsetHum1 ?: 0.0) as BigDecimal
+                else if (index == 1) humOffset = (settings.offsetHum2 ?: 0.0) as BigDecimal
+                else if (index == 2) humOffset = (settings.offsetHum3 ?: 0.0) as BigDecimal
+
+                BigDecimal adjustedH = rawH != null ? ((rawH as BigDecimal) + humOffset).setScale(1, BigDecimal.ROUND_HALF_UP) : null
+                if (adjustedH != null) validHums << adjustedH
+
+                String humStr = adjustedH != null ? " (${adjustedH}%, brut: ${rawH}%)" : ""
+                sensorDetails << "${dev.displayName}: ${adjustedT}°C [brut: ${rawT}°C]${humStr}"
             } else {
-                excluded << "${dev.displayName} (valeur aberrante: ${t}°C)"
+                excluded << "${dev.displayName} (valeur aberrante: ${adjustedT}°C)"
             }
         } else {
             excluded << dev.displayName
-        }
-    }
-
-    humSensors?.each { dev ->
-        if (isDeviceResponsive(dev, maxHours) && dev.currentValue("humidity") != null) {
-            validHums << (dev.currentValue("humidity") as BigDecimal)
         }
     }
 
