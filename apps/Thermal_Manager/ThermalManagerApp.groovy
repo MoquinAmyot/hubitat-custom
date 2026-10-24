@@ -26,6 +26,7 @@ def mainPage() {
                     List activeRecipients = getActiveSmsDevices()
                     
                     String statusHtml = "<b>Intérieur (Moyenne sur ${ind.activeCount} capteur(s)) :</b> ${ind.temperature} °C | Humidité : ${ind.humidity} % | Point de rosée : <b>${ind.dewPoint} °C</b><br>"
+                    statusHtml += "<small>Détail capteurs : ${ind.detailsSummary}</small><br>"
                     statusHtml += "<b>Extérieur (${settings.outdoorWeather.displayName}) :</b> ${ext.temperature} °C | Humidité : ${ext.humidity ?: 'N/A'} % | Point de rosée : <b>${ext.dewPoint} °C</b> (${ext.dewSource})<br>"
                     statusHtml += "<b>Écarts (Int - Ext) :</b> Delta T = <b>${deltaT} °C</b> | Delta Point de rosée = <b>${deltaDew} °C</b><br>"
                     statusHtml += "<b>Destinataires SMS actifs (Présents) :</b> <span style='color:${activeRecipients ? 'green' : 'orange'}; font-weight:bold;'>${activeRecipients ? activeRecipients.size() + ' personne(s) à la maison' : 'Personne (SMS suspendus)'}</span><br>"
@@ -100,7 +101,7 @@ def mainPage() {
         if (settings.runEvalNow) {
             app.updateSetting("runEvalNow", [value: "false", type: "bool"])
             evaluateThermalConditions()
-            section { paragraph "<span style='color:green;'>✓ Évaluation exécutée !</span>" }
+            section { paragraph "<span style='color:green;'>✓ Évaluation exécutée avec succès ! Consultez les logs pour voir le détail des capteurs (Temp & Humidité).</span>" }
         }
     }
 }
@@ -150,7 +151,17 @@ def evaluateThermalConditions() {
     Map ext = getOutdoorWeatherData(settings.outdoorWeather)
     Map ind = getIndoorAverageData(settings.indoorTempSensors, settings.indoorHumSensors)
 
-    if (!ext || !ind) return
+    if (!ext || !ind) {
+        log.warn "[ThermalManager] Évaluation impossible : données météo ou intérieures manquantes."
+        return
+    }
+
+    log.info "[ThermalManager] --- Évaluation Thermique ---"
+    log.info "[ThermalManager] Extérieur (${settings.outdoorWeather.displayName}) -> Temp: ${ext.temperature}°C, Hum: ${ext.humidity}%, Point de rosée: ${ext.dewPoint}°C"
+    log.info "[ThermalManager] Intérieur (Moyenne Temp: ${ind.temperature}°C, Hum: ${ind.humidity}%, PR: ${ind.dewPoint}°C) | Détails: ${ind.detailsSummary}"
+    if (ind.excludedNames) {
+        log.warn "[ThermalManager] Capteurs intérieurs exclus/muets : ${ind.excludedNames.join(', ')}"
+    }
 
     handleStaleSensorNotifications(ind.excludedNames)
 
@@ -245,11 +256,21 @@ Map getIndoorAverageData(tempSensors, humSensors) {
     List<BigDecimal> validTemps = []
     List<BigDecimal> validHums = []
     List<String> excluded = []
+    List<String> sensorDetails = []
 
+    // Associe chaque capteur à sa température et son humidité individuelle pour les logs
     tempSensors?.each { dev ->
         if (isDeviceResponsive(dev, maxHours) && dev.currentValue("temperature") != null) {
             BigDecimal t = dev.currentValue("temperature") as BigDecimal
-            if (t >= 5.0 && t <= 45.0) validTemps << t else excluded << dev.displayName
+            if (t >= 5.0 && t <= 45.0) {
+                validTemps << t
+                // Cherche l'humidité correspondante sur le même appareil s'il l'offre, sinon cherche dans humSensors
+                def hVal = dev.hasAttribute("humidity") ? dev.currentValue("humidity") : null
+                String humStr = hVal != null ? " (${hVal}%)" : ""
+                sensorDetails << "${dev.displayName}: ${t}°C${humStr}"
+            } else {
+                excluded << "${dev.displayName} (valeur aberrante: ${t}°C)"
+            }
         } else {
             excluded << dev.displayName
         }
@@ -264,7 +285,17 @@ Map getIndoorAverageData(tempSensors, humSensors) {
     if (validTemps.isEmpty()) return null
     BigDecimal avgTemp = (validTemps.sum() / validTemps.size()).setScale(2, BigDecimal.ROUND_HALF_UP)
     BigDecimal avgHum = validHums.isEmpty() ? 50.0 : (validHums.sum() / validHums.size()).setScale(1, BigDecimal.ROUND_HALF_UP)
-    return [temperature: avgTemp, humidity: avgHum, dewPoint: calculateDewPoint(avgTemp, avgHum), activeCount: validTemps.size(), excludedNames: excluded.unique()]
+    
+    String summaryStr = sensorDetails.join(" | ")
+
+    return [
+        temperature: avgTemp,
+        humidity: avgHum,
+        dewPoint: calculateDewPoint(avgTemp, avgHum),
+        activeCount: validTemps.size(),
+        excludedNames: excluded.unique(),
+        detailsSummary: summaryStr
+    ]
 }
 
 BigDecimal calculateDewPoint(BigDecimal tempC, BigDecimal relHum) {
