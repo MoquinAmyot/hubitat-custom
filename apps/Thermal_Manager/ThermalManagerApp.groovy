@@ -1,8 +1,8 @@
 definition(
-    name: "Gestionnaire Thermique (Delta T & Point de Rosée)",
+    name: "Gestionnaire Thermique (Delta T, Rosée & Présence Individualisée)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Analyse le Delta T et le Point de Rosée (via capteurs intérieurs et Meteo2 OpenWeatherMap) avec exclusion automatique des capteurs muets, suggestions d'ouverture des fenêtres par SMS et contrôle du ventilateur.",
+    description: "Analyse Delta T et Point de rosée avec exclusion des capteurs HS, contrôle ventilateur, et routage des SMS de notification selon la présence de chaque membre de la famille.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -15,7 +15,6 @@ preferences {
 def mainPage() {
     dynamicPage(name: "mainPage", title: "Configuration du Gestionnaire Thermique", install: true, uninstall: true) {
         
-        // Affichage d'un résumé en direct si les appareils sont déjà configurés
         if (settings.outdoorWeather && settings.indoorTempSensors) {
             section("📊 État Thermique Actuel (En direct)") {
                 Map ext = getOutdoorWeatherData(settings.outdoorWeather)
@@ -24,93 +23,107 @@ def mainPage() {
                 if (ext && ind) {
                     BigDecimal deltaT = (ind.temperature - ext.temperature).setScale(2, BigDecimal.ROUND_HALF_UP)
                     BigDecimal deltaDew = (ind.dewPoint - ext.dewPoint).setScale(2, BigDecimal.ROUND_HALF_UP)
+                    List activeRecipients = getActiveSmsDevices()
                     
                     String statusHtml = "<b>Intérieur (Moyenne sur ${ind.activeCount} capteur(s)) :</b> ${ind.temperature} °C | Humidité : ${ind.humidity} % | Point de rosée : <b>${ind.dewPoint} °C</b><br>"
                     statusHtml += "<b>Extérieur (${settings.outdoorWeather.displayName}) :</b> ${ext.temperature} °C | Humidité : ${ext.humidity ?: 'N/A'} % | Point de rosée : <b>${ext.dewPoint} °C</b> (${ext.dewSource})<br>"
                     statusHtml += "<b>Écarts (Int - Ext) :</b> Delta T = <b>${deltaT} °C</b> | Delta Point de rosée = <b>${deltaDew} °C</b><br>"
-                    statusHtml += "<b>État actuel de la recommandation :</b> <span style='color:blue; font-weight:bold;'>${state.currentAdvice ?: 'En attente du prochain cycle'}</span>"
+                    statusHtml += "<b>Destinataires SMS actifs (Présents) :</b> <span style='color:${activeRecipients ? 'green' : 'orange'}; font-weight:bold;'>${activeRecipients ? activeRecipients.size() + ' personne(s) à la maison' : 'Personne (SMS suspendus)'}</span><br>"
+                    statusHtml += "<b>État actuel :</b> <span style='color:blue; font-weight:bold;'>${state.currentAdvice ?: 'En attente'}</span>"
                     
                     if (ind.excludedNames && ind.excludedNames.size() > 0) {
-                        statusHtml += "<br><span style='color:red; font-weight:bold;'>⚠ Capteur(s) intérieur(s) exclu(s) temporairement (muets/HS) : ${ind.excludedNames.join(', ')}</span>"
-                    } else {
-                        statusHtml += "<br><span style='color:green;'>✓ Tous les capteurs intérieurs répondent normalement.</span>"
+                        statusHtml += "<br><span style='color:red;'>⚠ Capteur(s) exclu(s) : ${ind.excludedNames.join(', ')}</span>"
                     }
                     paragraph statusHtml
                 } else {
-                    paragraph "<span style='color:red; font-weight:bold;'>⚠ Impossible de calculer l'état thermique : Meteo2 ou tous les capteurs intérieurs sont muets.</span>"
+                    paragraph "<span style='color:red;'>⚠ Données météo ou intérieures indisponibles.</span>"
                 }
             }
         }
 
         section("1. Météo Extérieure (OpenWeatherMap / Meteo2)") {
-            input "outdoorWeather", "capability.temperatureMeasurement", title: "Dispositif Météo Extérieur (ex: Meteo2)", required: true, multiple: false, submitOnChange: true
+            input "outdoorWeather", "capability.temperatureMeasurement", title: "Dispositif Météo Extérieur (ex: Meteo2)", required: true, multiple: false
         }
         
-        section("2. Capteurs Intérieurs (Moyenne automatique)") {
-            input "indoorTempSensors", "capability.temperatureMeasurement", title: "Capteurs de Température intérieurs", required: true, multiple: true, submitOnChange: true
-            input "indoorHumSensors", "capability.relativeHumidityMeasurement", title: "Capteurs d'Humidité intérieurs", required: false, multiple: true, submitOnChange: true
-        }
-        
-        section("3. Sécurité & Exclusion automatique des capteurs HS") {
-            input "maxIndoorInactivityHours", "number", title: "Capteurs INTÉRIEURS : exclure temporairement si aucune communication depuis (heures)", defaultValue: 4, required: true
-            input "maxWeatherInactivityHours", "number", title: "Météo EXTÉRIEURE (Meteo2) : suspendre les calculs si l'API est muette depuis (heures)", defaultValue: 3, required: true
-            input "notifyOnStaleSensor", "bool", title: "Envoyer une alerte SMS (1 seule fois) quand un capteur intérieur décroche ou se rebranche ?", defaultValue: true
-        }
-        
-        section("4. Seuils de Décision (Ouverture des fenêtres & Free Cooling)") {
-            input "minIndoorTempForCooling", "decimal", title: "Température intérieure minimale pour suggérer d'ouvrir/rafraîchir (°C)", defaultValue: 22.5, required: true
-            input "minDeltaT", "decimal", title: "Delta T minimal requis (Temp Intérieure - Temp Extérieure en °C) pour ouvrir", defaultValue: 1.5, required: true
-            input "maxOutdoorDewPoint", "decimal", title: "Point de rosée extérieur maximal toléré (°C) [Anti-moiteur : ex. 16.0 °C]", defaultValue: 16.0, required: true
-            input "requireLowerOutdoorDewPoint", "bool", title: "Exiger aussi que le point de rosée extérieur soit inférieur au point de rosée intérieur ?", defaultValue: true
-            input "hysteresisTemp", "decimal", title: "Hystérésis (°C) avant de suggérer de refermer les fenêtres", defaultValue: 0.5, required: true
+        section("2. Capteurs Intérieurs") {
+            input "indoorTempSensors", "capability.temperatureMeasurement", title: "Capteurs de Température intérieurs", required: true, multiple: true
+            input "indoorHumSensors", "capability.relativeHumidityMeasurement", title: "Capteurs d'Humidité intérieurs", required: false, multiple: true
         }
 
-        section("5. Contrôle Automatique de la Ventilation (Optionnel)") {
-            input "thermostatDevice", "capability.thermostat", title: "Thermostat (ex: Ecobee - passera de fanAuto à fanOn pendant le refroidissement favorable)", required: false, multiple: false
-            input "fanSwitch", "capability.switch", title: "Interrupteur / Relais de ventilateur ou échangeur d'air (ON/OFF)", required: false, multiple: false
-            input "contactSensors", "capability.contactSensor", title: "Capteurs d'ouverture de fenêtres/portes (Optionnel : n'active le ventilateur que si au moins 1 fenêtre est ouverte)", required: false, multiple: true
+        section("3. Gestion de la Famille & Routage SMS par Présence") {
+            paragraph "Associez chaque membre de son capteur de présence (ex: OwnTracks) à son propre pilote Voip.ms :"
+            
+            // Membre 1 (ex: Benoit)
+            paragraph "<b>Membre 1</b>"
+            input "pres1", "capability.presenceSensor", title: "Capteur de présence (Benoit)", required: false, multiple: false
+            input "sms1", "capability.notification", title: "Pilote SMS Voip.ms (Benoit)", required: false, multiple: false
+            
+            // Membre 2 (ex: Nancy)
+            paragraph "<b>Membre 2</b>"
+            input "pres2", "capability.presenceSensor", title: "Capteur de présence (Nancy)", required: false, multiple: false
+            input "sms2", "capability.notification", title: "Pilote SMS Voip.ms (Nancy)", required: false, multiple: false
+            
+            // Membre 3 (optionnel)
+            paragraph "<b>Membre 3 (Optionnel)</b>"
+            input "pres3", "capability.presenceSensor", title: "Capteur de présence (Autre)", required: false, multiple: false
+            input "sms3", "capability.notification", title: "Pilote SMS Voip.ms (Autre)", required: false, multiple: false
+        }
+        
+        section("4. Sécurité & Exclusion automatique des capteurs HS") {
+            input "maxIndoorInactivityHours", "number", title: "Capteurs INTÉRIEURS : exclure si muets depuis (heures)", defaultValue: 4, required: true
+            input "maxWeatherInactivityHours", "number", title: "Météo EXTÉRIEURE (Meteo2) : suspendre si muette depuis (heures)", defaultValue: 3, required: true
+            input "notifyOnStaleSensor", "bool", title: "Alerter par SMS si un capteur décroche ?", defaultValue: true
+        }
+        
+        section("5. Seuils de Décision (Fenêtres & Free Cooling)") {
+            input "minIndoorTempForCooling", "decimal", title: "Température intérieure minimale pour suggérer d'ouvrir (°C)", defaultValue: 22.5, required: true
+            input "minDeltaT", "decimal", title: "Delta T minimal requis (Int - Ext en °C)", defaultValue: 1.5, required: true
+            input "maxOutdoorDewPoint", "decimal", title: "Point de rosée extérieur maximal toléré (°C)", defaultValue: 16.0, required: true
+            input "requireLowerOutdoorDewPoint", "bool", title: "Exiger que le PR extérieur soit inférieur au PR intérieur ?", defaultValue: true
+            input "hysteresisTemp", "decimal", title: "Hystérésis (°C)", defaultValue: 0.5, required: true
         }
 
-        section("6. Notifications SMS (Voip.ms) & Fréquence") {
-            input "smsDevice", "capability.notification", title: "Appareil de notification SMS (Voip.ms)", required: false, multiple: false
-            input "allowedModes", "mode", title: "Envoyer les SMS uniquement dans ces modes (vide = tous les modes)", required: false, multiple: true
-            input "minMinutesBetweenSms", "number", title: "Délai minimal entre deux recommandations SMS d'ouverture/fermeture (minutes)", defaultValue: 120, required: true
-            input "evalIntervalMinutes", "enum", title: "Fréquence d'évaluation périodique", options: ["5": "Toutes les 5 minutes", "10": "Toutes les 10 minutes", "15": "Toutes les 15 minutes", "30": "Toutes les 30 minutes"], defaultValue: "15", required: true
-            input "runEvalNow", "bool", title: "Cochez pour forcer une évaluation immédiate", defaultValue: false, submitOnChange: true
+        section("6. Contrôle Automatique de la Ventilation") {
+            input "thermostatDevice", "capability.thermostat", title: "Thermostat (ex: Ecobee - passe en fanOn / fanAuto)", required: false, multiple: false
+            input "fanSwitch", "capability.switch", title: "Interrupteur / Relais de ventilateur (ON/OFF)", required: false, multiple: false
+            input "contactSensors", "capability.contactSensor", title: "Capteurs de fenêtres (N'active le ventilateur que si une fenêtre est ouverte)", required: false, multiple: true
+        }
+
+        section("7. Paramètres de Notification SMS") {
+            input "allowedModes", "mode", title: "Modes autorisés pour les SMS (laisser vide = tous)", required: false, multiple: true
+            input "minMinutesBetweenSms", "number", title: "Délai minimal entre deux SMS (minutes)", defaultValue: 120, required: true
+            input "evalIntervalMinutes", "enum", options: ["5": "5 min", "10": "10 min", "15": "15 min", "30": "30 min"], defaultValue: "15", required: true
+            input "runEvalNow", "bool", title: "Forcer une évaluation immédiate", defaultValue: false, submitOnChange: true
         }
 
         if (settings.runEvalNow) {
             app.updateSetting("runEvalNow", [value: "false", type: "bool"])
             evaluateThermalConditions()
-            section { paragraph "<span style='color:green; font-weight:bold;'>✓ Évaluation manuelle exécutée !</span>" }
+            section { paragraph "<span style='color:green;'>✓ Évaluation exécutée !</span>" }
         }
     }
 }
 
-def installed() {
-    initialize()
-}
-
-def updated() {
-    unschedule()
-    unsubscribe()
-    initialize()
-}
+def installed() { initialize() }
+def updated() { unschedule(); unsubscribe(); initialize() }
 
 def initialize() {
     if (state.currentlyFavorable == null) state.currentlyFavorable = false
     if (state.currentAdvice == null) state.currentAdvice = "Initialisé"
     if (state.alertedStaleDevices == null) state.alertedStaleDevices = []
 
-    // Abonnements aux événements
     subscribe(outdoorWeather, "temperature", eventHandler)
     subscribe(outdoorWeather, "humidity", eventHandler)
     subscribe(outdoorWeather, "dewpoint", eventHandler)
     subscribe(indoorTempSensors, "temperature", eventHandler)
     if (indoorHumSensors) subscribe(indoorHumSensors, "humidity", eventHandler)
     if (contactSensors) subscribe(contactSensors, "contact", eventHandler)
+    
+    // Abonnements dynamiques à la présence de chaque membre configuré
+    if (pres1) subscribe(pres1, "presence", eventHandler)
+    if (pres2) subscribe(pres2, "presence", eventHandler)
+    if (pres3) subscribe(pres3, "presence", eventHandler)
 
-    // Planification périodique (indispensable pour détecter un capteur qui cesse d'émettre)
     String interval = settings.evalIntervalMinutes ?: "15"
     if (interval == "5") runEvery5Minutes(evaluateThermalConditions)
     else if (interval == "10") runEvery10Minutes(evaluateThermalConditions)
@@ -118,24 +131,45 @@ def initialize() {
     else runEvery15Minutes(evaluateThermalConditions)
 
     evaluateThermalConditions()
-    log.info "[ThermalManager] Initialisé avec succès (Intervalle: ${interval} min)."
+    log.info "[ThermalManager] Initialisé avec succès (Présence individualisée)."
 }
 
-def eventHandler(evt) {
-    evaluateThermalConditions()
+def eventHandler(evt) { evaluateThermalConditions() }
+
+// Retourne la liste unique des pilotes SMS Voip.ms dont le propriétaire est actuellement présent
+List getActiveSmsDevices() {
+    List activeSms = []
+    
+    // Membre 1
+    if (sms1) {
+        if (!pres1 || pres1.currentValue("presence") == "present") {
+            activeSms << sms1
+        }
+    }
+    
+    // Membre 2
+    if (sms2) {
+        if (!pres2 || pres2.currentValue("presence") == "present") {
+            activeSms << sms2
+        }
+    }
+    
+    // Membre 3
+    if (sms3) {
+        if (!pres3 || pres3.currentValue("presence") == "present") {
+            activeSms << sms3
+        }
+    }
+    
+    return activeSms.unique()
 }
 
-// --- LOGIQUE PRINCIPALE D'ÉVALUATION ---
 def evaluateThermalConditions() {
     Map ext = getOutdoorWeatherData(settings.outdoorWeather)
     Map ind = getIndoorAverageData(settings.indoorTempSensors, settings.indoorHumSensors)
 
-    if (!ext || !ind) {
-        log.warn "[ThermalManager] Évaluation annulée : données extérieures ou intérieures indisponibles."
-        return
-    }
+    if (!ext || !ind) return
 
-    // Gestion des alertes de capteurs intérieurs muets / rétablis
     handleStaleSensorNotifications(ind.excludedNames)
 
     BigDecimal inTemp = ind.temperature
@@ -144,7 +178,6 @@ def evaluateThermalConditions() {
     BigDecimal extDew = ext.dewPoint
 
     BigDecimal deltaT = (inTemp - extTemp).setScale(2, BigDecimal.ROUND_HALF_UP)
-    BigDecimal deltaDew = (inDew - extDew).setScale(2, BigDecimal.ROUND_HALF_UP)
 
     BigDecimal minInTemp = (settings.minIndoorTempForCooling ?: 22.5) as BigDecimal
     BigDecimal reqDeltaT = (settings.minDeltaT ?: 1.5) as BigDecimal
@@ -156,42 +189,28 @@ def evaluateThermalConditions() {
     boolean isFavorableNow = false
 
     if (!wasFavorable) {
-        // Conditions strictes pour ACTIVER la recommandation d'ouvrir les fenêtres
-        boolean tempHotEnough = (inTemp >= minInTemp)
-        boolean coolerOutside = (deltaT >= reqDeltaT)
-        boolean dryEnoughOutside = (extDew <= maxExtDew) && (!checkDewDiff || (extDew < inDew))
-
-        isFavorableNow = (tempHotEnough && coolerOutside && dryEnoughOutside)
+        isFavorableNow = (inTemp >= minInTemp) && (deltaT >= reqDeltaT) && (extDew <= maxExtDew) && (!checkDewDiff || (extDew < inDew))
     } else {
-        // Conditions avec hystérésis pour MAINTENIR l'ouverture sans effet yo-yo
-        boolean stillWarmInside = (inTemp >= (minInTemp - hyst))
-        boolean stillCoolerOutside = (deltaT >= (reqDeltaT - hyst))
-        boolean stillDryOutside = (extDew <= (maxExtDew + hyst)) && (!checkDewDiff || (extDew <= (inDew + hyst)))
-
-        isFavorableNow = (stillWarmInside && stillCoolerOutside && stillDryOutside)
+        isFavorableNow = (inTemp >= (minInTemp - hyst)) && (deltaT >= (reqDeltaT - hyst)) && (extDew <= (maxExtDew + hyst)) && (!checkDewDiff || (extDew <= (inDew + hyst)))
     }
 
-    // Changement d'état (Transition Favorable <-> Défavorable)
     if (isFavorableNow && !wasFavorable) {
         state.currentlyFavorable = true
-        state.currentAdvice = "OUVRIR LES FENÊTRES (Air extérieur frais et sec)"
+        state.currentAdvice = "OUVRIR LES FENÊTRES"
         String msg = "[Thermique] Ouvrir les fenetres : Int ${inTemp}C (PR ${inDew}C) vs Ext ${extTemp}C (PR ${extDew}C, DeltaT -${deltaT}C)."
-        if (ind.excludedNames) msg += " [Exclu: ${ind.excludedNames.join(',')}]"
-        sendRecommendationSms(msg)
+        sendTargetedSms(msg)
     } else if (!isFavorableNow && wasFavorable) {
         state.currentlyFavorable = false
-        state.currentAdvice = "FERMER LES FENÊTRES (Extérieur trop chaud ou humide)"
-        String msg = "[Thermique] Fermer les fenetres : Int ${inTemp}C (PR ${inDew}C) vs Ext ${extTemp}C (PR ${extDew}C)."
-        sendRecommendationSms(msg)
+        state.currentAdvice = "FERMER LES FENÊTRES"
+        String msg = "[Thermique] Fermer les fenetres : Int ${inTemp}C vs Ext ${extTemp}C."
+        sendTargetedSms(msg)
     } else {
         state.currentAdvice = isFavorableNow ? "OUVRIR LES FENÊTRES (Maintien)" : "FERMER LES FENÊTRES (Maintien)"
     }
 
-    // Pilotage de la ventilation (Thermostat Ecobee / Ventilateur)
     manageVentilation(isFavorableNow)
 }
 
-// --- PILOTAGE DU VENTILATEUR ---
 def manageVentilation(boolean favorable) {
     boolean windowsOpen = true
     if (settings.contactSensors) {
@@ -204,185 +223,110 @@ def manageVentilation(boolean favorable) {
         if (settings.thermostatDevice && settings.thermostatDevice.currentValue("thermostatFanMode") != "on") {
             settings.thermostatDevice.fanOn()
             state.fanControlledByApp = true
-            log.info "[ThermalManager] Ventilateur du thermostat activé (fanOn)."
         }
         if (settings.fanSwitch && settings.fanSwitch.currentValue("switch") != "on") {
             settings.fanSwitch.on()
             state.fanControlledByApp = true
-            log.info "[ThermalManager] Interrupteur de ventilation activé (ON)."
         }
     } else if (state.fanControlledByApp) {
         if (settings.thermostatDevice && settings.thermostatDevice.currentValue("thermostatFanMode") != "auto") {
             settings.thermostatDevice.fanAuto()
-            log.info "[ThermalManager] Ventilateur du thermostat remis en mode automatique (fanAuto)."
         }
         if (settings.fanSwitch && settings.fanSwitch.currentValue("switch") != "off") {
             settings.fanSwitch.off()
-            log.info "[ThermalManager] Interrupteur de ventilation désactivé (OFF)."
         }
         state.fanControlledByApp = false
     }
 }
 
-// --- VALIDATION ET EXCLUSION AUTOMATIQUE DES CAPTEURS ---
 boolean isDeviceResponsive(dev, int maxHours) {
     if (!dev) return false
-
-    if (dev.hasAttribute("healthStatus") && dev.currentValue("healthStatus") == "offline") {
-        log.warn "[ThermalManager] ${dev.displayName} ignoré (healthStatus = offline)."
-        return false
-    }
-
+    if (dev.hasAttribute("healthStatus") && dev.currentValue("healthStatus") == "offline") return false
     Date lastAct = dev.getLastActivity()
-    if (!lastAct) {
-        log.warn "[ThermalManager] ${dev.displayName} ignoré (aucune date d'activité connue)."
-        return false
-    }
-
+    if (!lastAct) return false
     long diffMs = now() - lastAct.time
-    long maxMs = maxHours * 3600000L
-    if (diffMs > maxMs) {
-        BigDecimal hoursAgo = (diffMs / 3600000.0).setScale(1, BigDecimal.ROUND_HALF_UP)
-        log.warn "[ThermalManager] ${dev.displayName} exclu temporairement : muet depuis ${hoursAgo} h (seuil: ${maxHours} h)."
-        return false
-    }
-    return true
+    return (diffMs <= (maxHours * 3600000L))
 }
 
 Map getOutdoorWeatherData(weatherDev) {
     int maxHours = (settings.maxWeatherInactivityHours ?: 3) as int
-    if (!isDeviceResponsive(weatherDev, maxHours)) {
-        log.error "[ThermalManager] Météo extérieure (${weatherDev?.displayName}) muette depuis plus de ${maxHours} h."
-        return null
-    }
-
-    def rawTemp = weatherDev.currentValue("temperature")
-    def rawHum = weatherDev.currentValue("humidity")
-    if (rawTemp == null) return null
-
-    BigDecimal extTemp = rawTemp as BigDecimal
-    BigDecimal extHum = (rawHum != null) ? (rawHum as BigDecimal) : 50.0
-
-    // Lecture directe de l'attribut 'dewpoint' de OpenWeatherMap-Alerts Weather Driver (ou calcul Magnus en secours)
-    def rawDew = weatherDev.currentValue("dewpoint")
-    if (rawDew == null) rawDew = weatherDev.currentValue("dewPoint")
-
-    BigDecimal extDewPoint = null
-    String source = ""
-    if (rawDew != null) {
-        extDewPoint = (rawDew as BigDecimal).setScale(2, BigDecimal.ROUND_HALF_UP)
-        source = "attribut direct OpenWeatherMap"
-    } else {
-        extDewPoint = calculateDewPoint(extTemp, extHum)
-        source = "calculé via Magnus"
-    }
-
-    return [
-        temperature: extTemp,
-        humidity: extHum,
-        dewPoint: extDewPoint,
-        dewSource: source
-    ]
+    if (!isDeviceResponsive(weatherDev, maxHours)) return null
+    BigDecimal extTemp = weatherDev.currentValue("temperature") as BigDecimal
+    BigDecimal extHum = (weatherDev.currentValue("humidity") != null) ? (weatherDev.currentValue("humidity") as BigDecimal) : 50.0
+    def rawDew = weatherDev.currentValue("dewpoint") ?: weatherDev.currentValue("dewPoint")
+    BigDecimal extDewPoint = (rawDew != null) ? (rawDew as BigDecimal).setScale(2, BigDecimal.ROUND_HALF_UP) : calculateDewPoint(extTemp, extHum)
+    return [temperature: extTemp, humidity: extHum, dewPoint: extDewPoint, dewSource: rawDew != null ? "direct" : "magnus"]
 }
 
 Map getIndoorAverageData(tempSensors, humSensors) {
     int maxHours = (settings.maxIndoorInactivityHours ?: 4) as int
     List<BigDecimal> validTemps = []
     List<BigDecimal> validHums = []
-    List<String> excludedDevices = []
+    List<String> excluded = []
 
     tempSensors?.each { dev ->
         if (isDeviceResponsive(dev, maxHours) && dev.currentValue("temperature") != null) {
             BigDecimal t = dev.currentValue("temperature") as BigDecimal
-            if (t >= 5.0 && t <= 45.0) {
-                validTemps << t
-            } else {
-                excludedDevices << "${dev.displayName} (val aberrante: ${t}C)"
-            }
+            if (t >= 5.0 && t <= 45.0) validTemps << t else excluded << dev.displayName
         } else {
-            excludedDevices << dev.displayName
+            excluded << dev.displayName
         }
     }
 
     humSensors?.each { dev ->
         if (isDeviceResponsive(dev, maxHours) && dev.currentValue("humidity") != null) {
-            BigDecimal h = dev.currentValue("humidity") as BigDecimal
-            if (h >= 5.0 && h <= 99.0) {
-                validHums << h
-            }
+            validHums << (dev.currentValue("humidity") as BigDecimal)
         }
     }
 
-    if (validTemps.isEmpty()) {
-        log.error "[ThermalManager] Aucun capteur de température intérieur valide disponible !"
-        return null
-    }
-
+    if (validTemps.isEmpty()) return null
     BigDecimal avgTemp = (validTemps.sum() / validTemps.size()).setScale(2, BigDecimal.ROUND_HALF_UP)
     BigDecimal avgHum = validHums.isEmpty() ? 50.0 : (validHums.sum() / validHums.size()).setScale(1, BigDecimal.ROUND_HALF_UP)
-    BigDecimal inDewPoint = calculateDewPoint(avgTemp, avgHum)
-
-    return [
-        temperature: avgTemp,
-        humidity: avgHum,
-        dewPoint: inDewPoint,
-        activeCount: validTemps.size(),
-        excludedNames: excludedDevices.unique()
-    ]
+    return [temperature: avgTemp, humidity: avgHum, dewPoint: calculateDewPoint(avgTemp, avgHum), activeCount: validTemps.size(), excludedNames: excluded.unique()]
 }
 
-// Formule de Magnus-Tetens pour le calcul du point de rosée (°C)
 BigDecimal calculateDewPoint(BigDecimal tempC, BigDecimal relHum) {
     double t = tempC as double
     double rh = Math.max(1.0d, Math.min(100.0d, relHum as double))
-    double a = 17.62d
-    double b = 243.12d
+    double a = 17.62d, b = 243.12d
     double alpha = ((a * t) / (b + t)) + Math.log(rh / 100.0d)
-    double dp = (b * alpha) / (a - alpha)
-    return new BigDecimal(dp).setScale(2, BigDecimal.ROUND_HALF_UP)
+    return new BigDecimal((b * alpha) / (a - alpha)).setScale(2, BigDecimal.ROUND_HALF_UP)
 }
 
-// --- ALERTES SMS (CAPTEURS MUETS & RECOMMANDATIONS) ---
 def handleStaleSensorNotifications(List<String> currentExcluded) {
-    if (!settings.notifyOnStaleSensor || !settings.smsDevice) return
+    if (!settings.notifyOnStaleSensor) return
+    List activeSms = getActiveSmsDevices()
+    if (activeSms.isEmpty()) return
 
-    List<String> previouslyAlerted = state.alertedStaleDevices ?: []
-
-    // Nouveaux capteurs qui viennent de tomber hors ligne
-    List<String> newlyStale = currentExcluded - previouslyAlerted
+    List<String> prev = state.alertedStaleDevices ?: []
+    List<String> newlyStale = currentExcluded - prev
     if (newlyStale.size() > 0) {
-        String msg = "[Thermique] Capteur(s) exclu(s) temporairement (muet > ${settings.maxIndoorInactivityHours}h) : ${newlyStale.join(', ')}"
-        settings.smsDevice.deviceNotification(msg)
-        log.warn msg
+        String msg = "[Thermique] Capteur(s) exclu(s) : ${newlyStale.join(', ')}"
+        activeSms.each { it.deviceNotification(msg) }
     }
-
-    // Capteurs qui étaient hors ligne et qui viennent de se rebrancher
-    List<String> recovered = previouslyAlerted - currentExcluded
-    if (recovered.size() > 0) {
-        String msg = "[Thermique] Capteur(s) rebranche(s) et reintegre(s) aux calculs : ${recovered.join(', ')}"
-        settings.smsDevice.deviceNotification(msg)
-        log.info msg
-    }
-
     state.alertedStaleDevices = currentExcluded
 }
 
-def sendRecommendationSms(String message) {
+def sendTargetedSms(String message) {
     log.info message
-    if (!settings.smsDevice) return
-
-    if (settings.allowedModes && !settings.allowedModes.contains(location.currentMode)) {
-        log.info "[ThermalManager] SMS non envoyé (Mode actuel ${location.currentMode} hors des modes autorisés)."
+    List activeSms = getActiveSmsDevices()
+    if (activeSms.isEmpty()) {
+        log.info "[ThermalManager] SMS suspendu : aucun membre de la famille n'est présent à la maison."
         return
     }
+
+    if (settings.allowedModes && !settings.allowedModes.contains(location.currentMode)) return
 
     long minWaitMs = ((settings.minMinutesBetweenSms ?: 120) as long) * 60000L
     long lastSent = state.lastSmsTimestamp ?: 0L
 
     if ((now() - lastSent) >= minWaitMs) {
-        settings.smsDevice.deviceNotification(message)
+        // Envoie le texto uniquement au pilote Voip.ms de la ou des personnes présentes
+        activeSms.each { smsDev ->
+            smsDev.deviceNotification(message)
+        }
         state.lastSmsTimestamp = now()
     } else {
-        log.info "[ThermalManager] SMS anti-spam bloqué (dernier SMS envoyé il y a moins de ${settings.minMinutesBetweenSms} min)."
+        log.info "[ThermalManager] SMS anti-spam bloqué (délai minimal non atteint)."
     }
 }
