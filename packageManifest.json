@@ -1,7 +1,7 @@
-{
+I{
   "packageName": "Benoit Hubitat Custom Suite",
   "author": "Benoit Tremblay",
-  "version": "1.0.28",
+  "version": "1.0.29",
   "minimumHEVersion": "2.3.0",
   "dateReleased": "2026-10-20",
   "apps": [
@@ -48,6 +48,15 @@
             "location": "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/device_state_monitor/DeviceStateMonitorApp.groovy",
             "required": true,
             "description": "Surveille une sélection d'appareils et envoie un SMS via Voip.ms à chaque changement d'état."
+        },
+        {
+            "id": "lighting-data-logger-app",
+            "name": "Enregistreur de Données d'Éclairage (Google Forms & CSV)",
+            "namespace": "custom",
+            "author": "Benoit Tremblay",
+            "location": "https://raw.githubusercontent.com/VOTRE_NOM_GITHUB/REPO_NAME/main/apps/LightingDataLoggerApp.groovy",
+            "required": false,
+            "description": "Enregistre l'heure, les Lux Hue et l'état des 7 switches (Avant/Arrière) vers Google Forms (Google Sheets) et/ou fichier CSV local."
         }
   ],
   "drivers": [
