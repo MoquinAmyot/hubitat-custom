@@ -54,7 +54,7 @@ I{
             "name": "Enregistreur de Données d'Éclairage (Google Forms & CSV)",
             "namespace": "custom",
             "author": "Benoit Tremblay",
-            "location": "https://raw.githubusercontent.com/VOTRE_NOM_GITHUB/REPO_NAME/main/apps/LightingDataLoggerApp/LightingDataLoggerApp.groovy",
+            "location" : "https://raw.githubusercontent.com/MoquinAmyot/hubitat-custom/main/apps/LightingDataLoggerApp/LightingDataLoggerApp.groovy",
             "required": true,
             "description": "Enregistre l'heure, les Lux Hue et l'état des 7 switches (Avant/Arrière) vers Google Forms (Google Sheets) et/ou fichier CSV local."
         }
