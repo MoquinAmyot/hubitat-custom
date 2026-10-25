@@ -2,7 +2,7 @@ definition(
     name: "Gestionnaire Thermique (Delta T, Rosée, 4 Membres & Offsets)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Gestion complète : Écarts internes, Free Cooling (Delta T/Rosée), Offsets, CO2, Humidité et routage SMS 4 membres.",
+    description: "Gestion complète : Écarts internes, Free Cooling (Delta T/Rosée), Offsets, CO2 (Max), Humidité et routage SMS 4 membres.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -26,13 +26,13 @@ def mainPage() {
                     BigDecimal deltaDew = (ind.dewPoint - ext.dewPoint).setScale(2, BigDecimal.ROUND_HALF_UP)
                     List activeRecipients = getActiveSmsDevices()
                     
-                    String statusHtml = "<b>Intérieur (${ind.activeCount} capteur(s)) :</b> Moy: ${ind.temperature} °C (Écart interne: ${ind.tempSpread} °C) | Hum: <b>${ind.humidity} %</b> | PR: <b>${ind.dewPoint} °C</b><br>"
+                    String statusHtml = "<b>Intérieur (${ind.activeCount} capteur(s)) :</b> Moy:${ind.temperature} °C (Écart interne: ${ind.tempSpread} °C) | Hum: <b>${ind.humidity} \%</b> \vert{} PR: <b>${ind.dewPoint} °C</b><br>"
                     statusHtml += "<small>Détail capteurs (avec offsets) : ${ind.detailsSummary}</small><br>"
                     if (air) {
-                        statusHtml += "<b>Qualité d'Air (CO2 moyen) :</b> <span style='color:${air.co2 > (settings.maxCo2Threshold ?: 1000) ? 'red' : 'green'}; font-weight:bold;'>${air.co2} ppm</span> (${air.details})<br>"
+                        statusHtml += "<b>Qualité d'Air (CO2 Max) :</b> <span style='color:${air.co2Max > (settings.maxCo2Threshold ?: 1000) ? 'red' : 'green'}; font-weight:bold;'>${air.co2Max} ppm</span> (Moy: ${air.co2Avg} ppm \vert{}${air.details})<br>"
                     }
-                    statusHtml += "<b>Extérieur (${settings.outdoorWeather.displayName}) :</b> ${ext.temperature} °C | Hum: ${ext.humidity ?: 'N/A'} % | PR: <b>${ext.dewPoint} °C</b> (${ext.dewSource})<br>"
-                    statusHtml += "<b>Écarts (Int - Ext) :</b> Delta T = <b>${deltaT} °C</b> | Delta PR = <b>${deltaDew} °C</b><br>"
+                    statusHtml += "<b>Extérieur (${settings.outdoorWeather.displayName}) :</b> ${ext.temperature} °C \vert{} Hum:${ext.humidity ?: 'N/A'} % | PR: <b>${ext.dewPoint} °C</b> (${ext.dewSource})<br>"
+                    statusHtml += "<b>Écarts (Int - Ext) :</b> Delta T = <b>${deltaT} °C</b> \vert{} Delta PR = <b>${deltaDew} °C</b><br>"
                     statusHtml += "<b>Destinataires SMS actifs :</b> <span style='color:${activeRecipients ? 'green' : 'orange'}; font-weight:bold;'>${activeRecipients ? activeRecipients.size() + ' personne(s) présente(s)' : 'Personne (SMS suspendus)'}</span><br>"
                     statusHtml += "<b>État actuel :</b> <span style='color:blue; font-weight:bold;'>${state.currentAdvice ?: 'En attente'}</span>"
                     
@@ -69,7 +69,7 @@ def mainPage() {
 
         section("3. Qualité de l'Air (CO2 - ex: Capteurs Ikea)") {
             input "airQualitySensors", "capability.carbonDioxideMeasurement", title: "Capteurs de CO2 (carbonDioxide)", required: false, multiple: true
-            input "maxCo2Threshold", "number", title: "Seuil de CO2 maximal avant ventilation forcée (ppm)", defaultValue: 1000, required: true
+            input "maxCo2Threshold", "number", title: "Seuil de CO2 maximal par pièce avant ventilation forcée (ppm)", defaultValue: 1000, required: true
         }
 
         section("4. Écarts Internes, Humidité & Protection Hivernale") {
@@ -168,274 +168,4 @@ def eventHandler(evt) { evaluateThermalConditions() }
 
 List getActiveSmsDevices() {
     List activeSms = []
-    if (sms1 && (!pres1 || pres1.currentValue("presence") == "present")) activeSms << sms1
-    if (sms2 && pres2 && pres2.currentValue("presence") == "present") activeSms << sms2
-    if (sms3 && pres3 && pres3.currentValue("presence") == "present") activeSms << sms3
-    if (sms4 && pres4 && pres4.currentValue("presence") == "present") activeSms << sms4
-    return activeSms.unique()
-}
-
-def evaluateThermalConditions() {
-    Map ext = getOutdoorWeatherData(settings.outdoorWeather)
-    Map ind = getIndoorAverageData(settings.indoorTempSensors, settings.indoorHumSensors)
-    Map air = getAirQualityData(settings.airQualitySensors)
-
-    if (!ext || !ind) {
-        log.warn "[ThermalManager] Évaluation impossible : données météo ou intérieures manquantes."
-        return
-    }
-
-    log.info "[ThermalManager] --- Évaluation Globale ---"
-    log.info "[ThermalManager] Extérieur -> Temp: ${ext.temperature}°C, Hum: ${ext.humidity}%, PR: ${ext.dewPoint}°C"
-    log.info "[ThermalManager] Intérieur -> Temp Moy: ${ind.temperature}°C (Écart: ${ind.tempSpread}°C), Hum Moy: ${ind.humidity}%, PR: ${ind.dewPoint}°C | ${ind.detailsSummary}"
-    if (air) log.info "[ThermalManager] Qualité d'air -> CO2 moyen: ${air.co2} ppm (${air.details})"
-
-    handleStaleSensorNotifications(ind.excludedNames)
-
-    BigDecimal inTemp = ind.temperature
-    BigDecimal inHum = ind.humidity
-    BigDecimal inDew = ind.dewPoint
-    BigDecimal inSpread = ind.tempSpread
-    BigDecimal extTemp = ext.temperature
-    BigDecimal extDew = ext.dewPoint
-
-    BigDecimal deltaT = (inTemp - extTemp).setScale(2, BigDecimal.ROUND_HALF_UP)
-    BigDecimal minExtTempForCooling = (settings.minOutdoorTempForCooling ?: -10.0) as BigDecimal
-    BigDecimal hyst = (settings.hysteresisTemp ?: 0.5) as BigDecimal
-
-    boolean isTooColdOutside = (extTemp < minExtTempForCooling)
-
-    // 1. Écart de température entre les pièces (Brassage interne)
-    BigDecimal maxSpread = (settings.maxInternalTempSpread ?: 2.0) as BigDecimal
-    boolean needInternalMixing = (inSpread >= maxSpread)
-
-    // 2. Free Cooling avec hystérésis
-    BigDecimal minInTemp = (settings.minIndoorTempForCooling ?: 22.5) as BigDecimal
-    BigDecimal reqDeltaT = (settings.minDeltaT ?: 1.5) as BigDecimal
-    BigDecimal maxExtDew = (settings.maxOutdoorDewPoint ?: 16.0) as BigDecimal
-    boolean checkDewDiff = (settings.requireLowerOutdoorDewPoint != false)
-
-    boolean wasFavorable = state.currentlyFavorable ?: false
-    boolean isFavorableThermal = false
-
-    if (!isTooColdOutside) {
-        if (!wasFavorable) {
-            isFavorableThermal = (inTemp >= minInTemp) && (deltaT >= reqDeltaT) && (extDew <= maxExtDew) && (!checkDewDiff || (extDew < inDew))
-        } else {
-            isFavorableThermal = (inTemp >= (minInTemp - hyst)) && (deltaT >= (reqDeltaT - hyst)) && (extDew <= (maxExtDew + hyst)) && (!checkDewDiff || (extDew <= (inDew + hyst)))
-        }
-    }
-
-    if (isFavorableThermal && !wasFavorable) {
-        state.currentlyFavorable = true
-        sendTargetedSms("[Thermique] Ouvrir les fenetres / Free Cooling : Int ${inTemp}C (PR ${inDew}C) vs Ext ${extTemp}C (PR ${extDew}C, DeltaT -${deltaT}C).")
-    } else if (!isFavorableThermal && wasFavorable) {
-        state.currentlyFavorable = false
-        sendTargetedSms("[Thermique] Fermer les fenetres : Int ${inTemp}C vs Ext ${extTemp}C.")
-    }
-
-    // 3. Qualité d'air (CO2 > seuil)
-    int co2Threshold = (settings.maxCo2Threshold ?: 1000) as int
-    boolean highCo2 = air && (air.co2 > co2Threshold) && !isTooColdOutside
-
-    // 4. Humidité excessive (> 60% et air extérieur plus sec)
-    BigDecimal maxHumLimit = (settings.maxHumidityThreshold ?: 60.0) as BigDecimal
-    boolean tooHumid = (inHum > maxHumLimit) && (extDew < inDew) && !isTooColdOutside
-
-    // 5. Air trop sec (< 30%) -> Alerte SMS avec hystérésis (+2%)
-    BigDecimal minHumLimit = (settings.minHumidityThreshold ?: 30.0) as BigDecimal
-    if (inHum < minHumLimit) {
-        if (!state.dryAirAlertSent) {
-            sendTargetedSms("[Alerte Air Sec] L'humidite interieure est de ${inHum}% (sous le seuil de ${minHumLimit}%).")
-            state.dryAirAlertSent = true
-        }
-    } else if (inHum >= (minHumLimit + 2.0)) {
-        state.dryAirAlertSent = false
-    }
-
-    boolean finalVentilationNeeded = isFavorableThermal || highCo2 || tooHumid || needInternalMixing
-
-    if (isFavorableThermal) {
-        state.currentAdvice = "VENTILATION ACTIVE (Free Cooling)"
-    } else if (highCo2) {
-        state.currentAdvice = "VENTILATION FORCÉE (CO2 élevé: ${air.co2} ppm)"
-    } else if (tooHumid) {
-        state.currentAdvice = "VENTILATION FORCÉE (Trop humide: ${inHum}%)"
-    } else if (needInternalMixing) {
-        state.currentAdvice = "BRASSAGE ACTIF (Écart pièces: ${inSpread}°C)"
-    } else {
-        state.currentAdvice = "VENTILATION ARRÊTÉE (Normal)"
-    }
-
-    manageVentilation(finalVentilationNeeded)
-}
-
-def manageVentilation(boolean shouldRunFan) {
-    if (shouldRunFan) {
-        if (settings.thermostatDevice && settings.thermostatDevice.currentValue("thermostatFanMode") != "on") {
-            settings.thermostatDevice.fanOn()
-            state.fanControlledByApp = true
-        }
-        if (settings.fanSwitch && settings.fanSwitch.currentValue("switch") != "on") {
-            settings.fanSwitch.on()
-            state.fanControlledByApp = true
-        }
-    } else if (state.fanControlledByApp) {
-        if (settings.thermostatDevice && settings.thermostatDevice.currentValue("thermostatFanMode") != "auto") {
-            settings.thermostatDevice.fanAuto()
-        }
-        if (settings.fanSwitch && settings.fanSwitch.currentValue("switch") != "off") {
-            settings.fanSwitch.off()
-        }
-        state.fanControlledByApp = false
-    }
-}
-
-boolean isDeviceResponsive(dev, int maxHours) {
-    if (!dev) return false
-    if (dev.hasAttribute("healthStatus") && dev.currentValue("healthStatus") == "offline") return false
-    Date lastAct = dev.getLastActivity()
-    if (!lastAct) return false
-    long diffMs = now() - lastAct.time
-    return (diffMs <= (maxHours * 3600000L))
-}
-
-Map getOutdoorWeatherData(weatherDev) {
-    int maxHours = (settings.maxWeatherInactivityHours ?: 3) as int
-    if (!isDeviceResponsive(weatherDev, maxHours)) return null
-    BigDecimal extTemp = weatherDev.currentValue("temperature") as BigDecimal
-    BigDecimal extHum = (weatherDev.currentValue("humidity") != null) ? (weatherDev.currentValue("humidity") as BigDecimal) : 50.0
-    def rawDew = weatherDev.currentValue("dewpoint") ?: weatherDev.currentValue("dewPoint")
-    BigDecimal extDewPoint = (rawDew != null) ? (rawDew as BigDecimal).setScale(2, BigDecimal.ROUND_HALF_UP) : calculateDewPoint(extTemp, extHum)
-    return [temperature: extTemp, humidity: extHum, dewPoint: extDewPoint, dewSource: rawDew != null ? "direct" : "magnus"]
-}
-
-BigDecimal getTempOffsetForIndex(int idx) {
-    if (idx == 0) return (settings.offsetTemp1 ?: 0.0) as BigDecimal
-    if (idx == 1) return (settings.offsetTemp2 ?: 0.0) as BigDecimal
-    if (idx == 2) return (settings.offsetTemp3 ?: 0.0) as BigDecimal
-    if (idx == 3) return (settings.offsetTemp4 ?: 0.0) as BigDecimal
-    if (idx == 4) return (settings.offsetTemp5 ?: 0.0) as BigDecimal
-    return 0.0
-}
-
-BigDecimal getHumOffsetForIndex(int idx) {
-    if (idx == 0) return (settings.offsetHum1 ?: 0.0) as BigDecimal
-    if (idx == 1) return (settings.offsetHum2 ?: 0.0) as BigDecimal
-    if (idx == 2) return (settings.offsetHum3 ?: 0.0) as BigDecimal
-    if (idx == 3) return (settings.offsetHum4 ?: 0.0) as BigDecimal
-    if (idx == 4) return (settings.offsetHum5 ?: 0.0) as BigDecimal
-    return 0.0
-}
-
-Map getIndoorAverageData(tempSensors, humSensors) {
-    int maxHours = (settings.maxIndoorInactivityHours ?: 4) as int
-    List<BigDecimal> validTemps = []
-    List<BigDecimal> validHums = []
-    List<String> excluded = []
-    List<String> sensorDetails = []
-
-    tempSensors?.eachWithIndex { dev, index ->
-        if (isDeviceResponsive(dev, maxHours) && dev.currentValue("temperature") != null) {
-            BigDecimal rawT = dev.currentValue("temperature") as BigDecimal
-            BigDecimal tempOffset = getTempOffsetForIndex(index)
-            BigDecimal adjustedT = (rawT + tempOffset).setScale(2, BigDecimal.ROUND_HALF_UP)
-
-            if (adjustedT >= 5.0 && adjustedT <= 45.0) {
-                validTemps << adjustedT
-                
-                def rawH = dev.hasAttribute("humidity") ? dev.currentValue("humidity") : null
-                BigDecimal humOffset = getHumOffsetForIndex(index)
-                BigDecimal adjustedH = rawH != null ? ((rawH as BigDecimal) + humOffset).setScale(1, BigDecimal.ROUND_HALF_UP) : null
-                if (adjustedH != null) validHums << adjustedH
-
-                String humStr = adjustedH != null ? " (${adjustedH}%)" : ""
-                sensorDetails << "${dev.displayName}: ${adjustedT}°C${humStr}"
-            } else {
-                excluded << "${dev.displayName} (valeur aberrante: ${adjustedT}°C)"
-            }
-        } else {
-            excluded << dev.displayName
-        }
-    }
-
-    humSensors?.each { dev ->
-        if (!tempSensors?.find { it.id == dev.id }) {
-            if (isDeviceResponsive(dev, maxHours) && dev.currentValue("humidity") != null) {
-                validHums << (dev.currentValue("humidity") as BigDecimal)
-            }
-        }
-    }
-
-    if (validTemps.isEmpty()) return null
-    BigDecimal avgTemp = (validTemps.sum() / validTemps.size()).setScale(2, BigDecimal.ROUND_HALF_UP)
-    BigDecimal avgHum = validHums.isEmpty() ? 50.0 : (validHums.sum() / validHums.size()).setScale(1, BigDecimal.ROUND_HALF_UP)
-    BigDecimal spread = (validTemps.size() > 1) ? (validTemps.max() - validTemps.min()).setScale(2, BigDecimal.ROUND_HALF_UP) : 0.0
-    
-    return [
-        temperature: avgTemp,
-        humidity: avgHum,
-        dewPoint: calculateDewPoint(avgTemp, avgHum),
-        tempSpread: spread,
-        activeCount: validTemps.size(),
-        excludedNames: excluded.unique(),
-        detailsSummary: sensorDetails.join(" | ")
-    ]
-}
-
-Map getAirQualityData(airSensors) {
-    if (!airSensors) return null
-    List<Integer> co2Values = []
-    List<String> details = []
-    airSensors.each { dev ->
-        def co2 = dev.currentValue("carbonDioxide")
-        if (co2 != null) {
-            int val = co2 as Integer
-            co2Values << val
-            details << "${dev.displayName}: ${val} ppm"
-        }
-    }
-    if (co2Values.isEmpty()) return null
-    return [
-        co2: (co2Values.sum() / co2Values.size()) as int,
-        details: details.join(", ")
-    ]
-}
-
-BigDecimal calculateDewPoint(BigDecimal tempC, BigDecimal relHum) {
-    double t = tempC as double
-    double rh = Math.max(1.0d, Math.min(100.0d, relHum as double))
-    double a = 17.62d, b = 243.12d
-    double alpha = ((a * t) / (b + t)) + Math.log(rh / 100.0d)
-    return new BigDecimal((b * alpha) / (a - alpha)).setScale(2, BigDecimal.ROUND_HALF_UP)
-}
-
-def handleStaleSensorNotifications(List<String> currentExcluded) {
-    if (!settings.notifyOnStaleSensor) return
-    List activeSms = getActiveSmsDevices()
-    if (activeSms.isEmpty()) return
-
-    List<String> prev = state.alertedStaleDevices ?: []
-    List<String> newlyStale = currentExcluded - prev
-    if (newlyStale.size() > 0) {
-        String msg = "[Thermique] Capteur(s) exclu(s) : ${newlyStale.join(', ')}"
-        activeSms.each { it.deviceNotification(msg) }
-    }
-    state.alertedStaleDevices = currentExcluded
-}
-
-def sendTargetedSms(String message) {
-    log.info message
-    List activeSms = getActiveSmsDevices()
-    if (activeSms.isEmpty()) return
-
-    if (settings.allowedModes && !settings.allowedModes.contains(location.currentMode)) return
-
-    long minWaitMs = ((settings.minMinutesBetweenSms ?: 120) as long) * 60000L
-    long lastSent = state.lastSmsTimestamp ?: 0L
-
-    if ((now() - lastSent) >= minWaitMs) {
-        activeSms.each { it.deviceNotification(message) }
-        state.lastSmsTimestamp = now()
-    }
-}
+    if (
