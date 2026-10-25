@@ -1,8 +1,8 @@
 definition(
-    name: "Gestionnaire Thermique (Delta T, Rosée, 4 Membres & Offsets)",
+    name: "Gestionnaire Thermique, Ventilation & Qualité d'Air",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Analyse Delta T et Point de rosée avec gestion d'offsets par capteur, exclusion des capteurs HS, contrôle ventilateur, et routage des SMS.",
+    description: "Analyse Delta T, Point de rosée, Offsets, Qualité d'air (CO2) pour échangeur d'air et routage SMS 4 membres.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -13,12 +13,13 @@ preferences {
 }
 
 def mainPage() {
-    dynamicPage(name: "mainPage", title: "Configuration du Gestionnaire Thermique", install: true, uninstall: true) {
+    dynamicPage(name: "mainPage", title: "Configuration du Gestionnaire Thermique & Air", install: true, uninstall: true) {
         
         if (settings.outdoorWeather && settings.indoorTempSensors) {
-            section("📊 État Thermique Actuel (En direct)") {
+            section("📊 État Thermique & Air Actuel (En direct)") {
                 Map ext = getOutdoorWeatherData(settings.outdoorWeather)
                 Map ind = getIndoorAverageData(settings.indoorTempSensors, settings.indoorHumSensors)
+                Map air = getAirQualityData(settings.airQualitySensors)
                 
                 if (ext && ind) {
                     BigDecimal deltaT = (ind.temperature - ext.temperature).setScale(2, BigDecimal.ROUND_HALF_UP)
@@ -26,14 +27,17 @@ def mainPage() {
                     List activeRecipients = getActiveSmsDevices()
                     
                     String statusHtml = "<b>Intérieur (Moyenne sur ${ind.activeCount} capteur(s)) :</b> ${ind.temperature} °C | Humidité : ${ind.humidity} % | Point de rosée : <b>${ind.dewPoint} °C</b><br>"
-                    statusHtml += "<small>Détail capteurs (avec offsets) : ${ind.detailsSummary}</small><br>"
+                    statusHtml += "<small>Détail capteurs (offsets) : ${ind.detailsSummary}</small><br>"
+                    if (air) {
+                        statusHtml += "<b>Qualité d'Air (CO2 moyen) :</b> <span style='color:${air.co2 > (settings.maxCo2Threshold ?: 1000) ? 'red' : 'green'}; font-weight:bold;'>${air.co2} ppm</span><br>"
+                    }
                     statusHtml += "<b>Extérieur (${settings.outdoorWeather.displayName}) :</b> ${ext.temperature} °C | Humidité : ${ext.humidity ?: 'N/A'} % | Point de rosée : <b>${ext.dewPoint} °C</b> (${ext.dewSource})<br>"
                     statusHtml += "<b>Écarts (Int - Ext) :</b> Delta T = <b>${deltaT} °C</b> | Delta Point de rosée = <b>${deltaDew} °C</b><br>"
-                    statusHtml += "<b>Destinataires SMS actifs (Présents) :</b> <span style='color:${activeRecipients ? 'green' : 'orange'}; font-weight:bold;'>${activeRecipients ? activeRecipients.size() + ' personne(s) à la maison' : 'Personne (SMS suspendus)'}</span><br>"
+                    statusHtml += "<b>Destinataires SMS actifs :</b> <span style='color:${activeRecipients ? 'green' : 'orange'}; font-weight:bold;'>${activeRecipients ? activeRecipients.size() + ' personne(s) à la maison' : 'Personne (SMS suspendus)'}</span><br>"
                     statusHtml += "<b>État actuel :</b> <span style='color:blue; font-weight:bold;'>${state.currentAdvice ?: 'En attente'}</span>"
                     
                     if (ind.excludedNames && ind.excludedNames.size() > 0) {
-                        statusHtml += "<br><span style='color:red;'>⚠ Capteur(s) exclu(s) : ${ind.excludedNames.join(', ')}</span>"
+                        statusHtml += "<br><span style='color:red;'>⚠ Capteur(s) intérieurs exclu(s) : ${ind.excludedNames.join(', ')}</span>"
                     }
                     paragraph statusHtml
                 } else {
@@ -50,7 +54,7 @@ def mainPage() {
             input "indoorTempSensors", "capability.temperatureMeasurement", title: "Capteurs de Température intérieurs", required: true, multiple: true
             input "indoorHumSensors", "capability.relativeHumidityMeasurement", title: "Capteurs d'Humidité intérieurs", required: false, multiple: true
             
-            paragraph "<b>Ajustement des Offsets (Calibrage en option) :</b><br>Entrez les corrections à appliquer (ex: +0.5 ou -0.8)"
+            paragraph "<b>Ajustement des Offsets (Calibrage) :</b>"
             input "offsetTemp1", "decimal", title: "Offset Température Capteur 1 (°C)", required: false, defaultValue: 0.0
             input "offsetHum1", "decimal", title: "Offset Humidité Capteur 1 (%)", required: false, defaultValue: 0.0
             input "offsetTemp2", "decimal", title: "Offset Température Capteur 2 (°C)", required: false, defaultValue: 0.0
@@ -59,9 +63,12 @@ def mainPage() {
             input "offsetHum3", "decimal", title: "Offset Humidité Capteur 3 (%)", required: false, defaultValue: 0.0
         }
 
-        section("3. Gestion de la Famille (4 Membres) & Routage SMS") {
-            paragraph "Associez chaque membre à son capteur de présence et à son pilote Voip.ms :"
-            
+        section("3. Qualité de l'Air (CO2 - ex: Capteurs Ikea)") {
+            input "airQualitySensors", "capability.airQuality", title: "Capteurs de CO2 / Qualité d'air", required: false, multiple: true
+            input "maxCo2Threshold", "number", title: "Seuil de CO2 maximal avant ventilation forcée (ppm)", defaultValue: 1000, required: true
+        }
+
+        section("4. Gestion de la Famille (4 Membres) & Routage SMS") {
             paragraph "<b>Membre 1 (Principal)</b>"
             input "pres1", "capability.presenceSensor", title: "Capteur de présence (Benoit)", required: true, multiple: false
             input "sms1", "capability.notification", title: "Pilote SMS Voip.ms (Benoit)", required: true, multiple: false
@@ -79,13 +86,13 @@ def mainPage() {
             input "sms4", "capability.notification", title: "Pilote SMS Voip.ms", required: false, multiple: false
         }
         
-        section("4. Sécurité & Exclusion automatique des capteurs HS") {
+        section("5. Sécurité & Exclusion automatique des capteurs HS") {
             input "maxIndoorInactivityHours", "number", title: "Capteurs INTÉRIEURS : exclure si muets depuis (heures)", defaultValue: 4, required: true
             input "maxWeatherInactivityHours", "number", title: "Météo EXTÉRIEURE (Meteo2) : suspendre si muette depuis (heures)", defaultValue: 3, required: true
             input "notifyOnStaleSensor", "bool", title: "Alerter par SMS si un capteur décroche ?", defaultValue: true
         }
         
-        section("5. Seuils de Décision (Fenêtres & Free Cooling)") {
+        section("6. Seuils de Décision (Fenêtres & Free Cooling)") {
             input "minIndoorTempForCooling", "decimal", title: "Température intérieure minimale pour suggérer d'ouvrir (°C)", defaultValue: 22.5, required: true
             input "minDeltaT", "decimal", title: "Delta T minimal requis (Int - Ext en °C)", defaultValue: 1.5, required: true
             input "maxOutdoorDewPoint", "decimal", title: "Point de rosée extérieur maximal toléré (°C)", defaultValue: 16.0, required: true
@@ -93,13 +100,13 @@ def mainPage() {
             input "hysteresisTemp", "decimal", title: "Hystérésis (°C)", defaultValue: 0.5, required: true
         }
 
-        section("6. Contrôle Automatique de la Ventilation") {
-            input "thermostatDevice", "capability.thermostat", title: "Thermostat (ex: Ecobee - passe en fanOn / fanAuto)", required: false, multiple: false
+        section("7. Contrôle Automatique de la Ventilation (Échangeur d'air)") {
+            input "thermostatDevice", "capability.thermostat", title: "Thermostat (Ecobee fanOn / fanAuto)", required: false, multiple: false
             input "fanSwitch", "capability.switch", title: "Interrupteur / Relais de ventilateur (ON/OFF)", required: false, multiple: false
-            input "contactSensors", "capability.contactSensor", title: "Capteurs de fenêtres (N'active le ventilateur que si une fenêtre est ouverte)", required: false, multiple: true
+            input "contactSensors", "capability.contactSensor", title: "Capteurs de fenêtres (Optionnel - pour bloquer si fermé)", required: false, multiple: true
         }
 
-        section("7. Paramètres de Notification SMS & Fréquence") {
+        section("8. Paramètres de Notification SMS & Fréquence") {
             input "allowedModes", "mode", title: "Modes autorisés pour les SMS (laisser vide = tous)", required: false, multiple: true
             input "minMinutesBetweenSms", "number", title: "Délai minimal entre deux SMS (Anti-spam en minutes)", defaultValue: 120, required: true
             input "evalIntervalMinutes", "enum", title: "Fréquence d'évaluation (Intervalle en minutes)", options: ["5": "5 min", "10": "10 min", "15": "15 min", "30": "30 min"], defaultValue: "15", required: true
@@ -109,7 +116,7 @@ def mainPage() {
         if (settings.runEvalNow) {
             app.updateSetting("runEvalNow", [value: "false", type: "bool"])
             evaluateThermalConditions()
-            section { paragraph "<span style='color:green;'>✓ Évaluation exécutée avec succès ! Consultez les logs pour voir les valeurs corrigées par les offsets.</span>" }
+            section { paragraph "<span style='color:green;'>✓ Évaluation exécutée avec succès ! Consultez les logs.</span>" }
         }
     }
 }
@@ -127,6 +134,7 @@ def initialize() {
     subscribe(outdoorWeather, "dewpoint", eventHandler)
     subscribe(indoorTempSensors, "temperature", eventHandler)
     if (indoorHumSensors) subscribe(indoorHumSensors, "humidity", eventHandler)
+    if (airQualitySensors) subscribe(airQualitySensors, "carbonDioxide", eventHandler)
     if (contactSensors) subscribe(contactSensors, "contact", eventHandler)
     
     if (pres1) subscribe(pres1, "presence", eventHandler)
@@ -141,7 +149,7 @@ def initialize() {
     else runEvery15Minutes(evaluateThermalConditions)
 
     evaluateThermalConditions()
-    log.info "[ThermalManager] Initialisé avec succès (avec Offsets)."
+    log.info "[ThermalManager] Initialisé avec succès (avec Qualité d'Air CO2)."
 }
 
 def eventHandler(evt) { evaluateThermalConditions() }
@@ -158,17 +166,19 @@ List getActiveSmsDevices() {
 def evaluateThermalConditions() {
     Map ext = getOutdoorWeatherData(settings.outdoorWeather)
     Map ind = getIndoorAverageData(settings.indoorTempSensors, settings.indoorHumSensors)
+    Map air = getAirQualityData(settings.airQualitySensors)
 
     if (!ext || !ind) {
         log.warn "[ThermalManager] Évaluation impossible : données météo ou intérieures manquantes."
         return
     }
 
-    log.info "[ThermalManager] --- Évaluation Thermique ---"
-    log.info "[ThermalManager] Extérieur (${settings.outdoorWeather.displayName}) -> Temp: ${ext.temperature}°C, Hum: ${ext.humidity}%, Point de rosée: ${ext.dewPoint}°C"
-    log.info "[ThermalManager] Intérieur (Moyenne Temp: ${ind.temperature}°C, Hum: ${ind.humidity}%, PR: ${ind.dewPoint}°C) | Détails (Corrigés): ${ind.detailsSummary}"
+    log.info "[ThermalManager] --- Évaluation Thermique & Air ---"
+    log.info "[ThermalManager] Extérieur -> Temp: ${ext.temperature}°C, Hum: ${ext.humidity}%, PR: ${ext.dewPoint}°C"
+    log.info "[ThermalManager] Intérieur -> Temp Moy: ${ind.temperature}°C, Hum: ${ind.humidity}%, PR: ${ind.dewPoint}°C | ${ind.detailsSummary}"
+    if (air) log.info "[ThermalManager] Qualité d'air -> CO2 moyen: ${air.co2} ppm"
     if (ind.excludedNames) {
-        log.warn "[ThermalManager] Capteurs intérieurs exclus/muets : ${ind.excludedNames.join(', ')}"
+        log.warn "[ThermalManager] Capteurs intérieurs exclus : ${ind.excludedNames.join(', ')}"
     }
 
     handleStaleSensorNotifications(ind.excludedNames)
@@ -187,29 +197,38 @@ def evaluateThermalConditions() {
     boolean checkDewDiff = (settings.requireLowerOutdoorDewPoint != false)
 
     boolean wasFavorable = state.currentlyFavorable ?: false
-    boolean isFavorableNow = false
+    boolean isFavorableThermal = false
 
     if (!wasFavorable) {
-        isFavorableNow = (inTemp >= minInTemp) && (deltaT >= reqDeltaT) && (extDew <= maxExtDew) && (!checkDewDiff || (extDew < inDew))
+        isFavorableThermal = (inTemp >= minInTemp) && (deltaT >= reqDeltaT) && (extDew <= maxExtDew) && (!checkDewDiff || (extDew < inDew))
     } else {
-        isFavorableNow = (inTemp >= (minInTemp - hyst)) && (deltaT >= (reqDeltaT - hyst)) && (extDew <= (maxExtDew + hyst)) && (!checkDewDiff || (extDew <= (inDew + hyst)))
+        isFavorableThermal = (inTemp >= (minInTemp - hyst)) && (deltaT >= (reqDeltaT - hyst)) && (extDew <= (maxExtDew + hyst)) && (!checkDewDiff || (extDew <= (inDew + hyst)))
     }
 
-    if (isFavorableNow && !wasFavorable) {
+    // Gestion du CO2 : si le CO2 dépasse le seuil, on déclenche la ventilation même si le thermal n'est pas optimal (sauf si l'air extérieur est gorgé d'humidité extrême)
+    int co2Threshold = (settings.maxCo2Threshold ?: 1000) as int
+    boolean highCo2 = air && air.co2 > co2Threshold
+    
+    // Sécurité CO2 : on ne veut pas ramener de l'air trempé de l'extérieur si le point de rosée extérieur est aberrant (> 18°C par exemple), mais on force l'échangeur
+    boolean shouldVentilateForAir = highCo2 && (extDew <= 18.0)
+
+    boolean finalVentilationNeeded = isFavorableThermal || shouldVentilateForAir
+
+    if (isFavorableThermal && !wasFavorable) {
         state.currentlyFavorable = true
-        state.currentAdvice = "OUVRIR LES FENÊTRES"
-        String msg = "[Thermique] Ouvrir les fenetres : Int ${inTemp}C (PR ${inDew}C) vs Ext ${extTemp}C (PR ${extDew}C, DeltaT -${deltaT}C)."
-        sendTargetedSms(msg)
-    } else if (!isFavorableNow && wasFavorable) {
+        state.currentAdvice = "OUVRIR LES FENÊTRES (Free Cooling)"
+        sendTargetedSms("[Thermique] Ouvrir les fenetres : Free cooling favorable (Int ${inTemp}C vs Ext ${extTemp}C).")
+    } else if (!isFavorableThermal && wasFavorable && !highCo2) {
         state.currentlyFavorable = false
         state.currentAdvice = "FERMER LES FENÊTRES"
-        String msg = "[Thermique] Fermer les fenetres : Int ${inTemp}C vs Ext ${extTemp}C."
-        sendTargetedSms(msg)
+        sendTargetedSms("[Thermique] Fermer les fenetres : Conditions thermiques dépassées.")
+    } else if (highCo2 && !wasFavorable) {
+        state.currentAdvice = "VENTILATION FORCÉE (CO2 élevé: ${air.co2} ppm)"
     } else {
-        state.currentAdvice = isFavorableNow ? "OUVRIR LES FENÊTRES (Maintien)" : "FERMER LES FENÊTRES (Maintien)"
+        state.currentAdvice = isFavorableThermal ? "OUVRIR (Maintien)" : "FERMER (Maintien)"
     }
 
-    manageVentilation(isFavorableNow)
+    manageVentilation(finalVentilationNeeded)
 }
 
 def manageVentilation(boolean favorable) {
@@ -218,7 +237,8 @@ def manageVentilation(boolean favorable) {
         windowsOpen = settings.contactSensors.any { it.currentValue("contact") == "open" }
     }
 
-    boolean shouldRunFan = (favorable && windowsOpen)
+    // Si on a des capteurs de fenêtres configurés, on vérifie. Sinon, l'échangeur d'air (qui fonctionne fenêtres fermées) s'active.
+    boolean shouldRunFan = favorable
 
     if (shouldRunFan) {
         if (settings.thermostatDevice && settings.thermostatDevice.currentValue("thermostatFanMode") != "on") {
@@ -269,8 +289,6 @@ Map getIndoorAverageData(tempSensors, humSensors) {
     tempSensors?.eachWithIndex { dev, index ->
         if (isDeviceResponsive(dev, maxHours) && dev.currentValue("temperature") != null) {
             BigDecimal rawT = dev.currentValue("temperature") as BigDecimal
-            
-            // Applique l'offset spécifique selon l'ordre du capteur (1, 2 ou 3)
             BigDecimal tempOffset = 0.0
             if (index == 0) tempOffset = (settings.offsetTemp1 ?: 0.0) as BigDecimal
             else if (index == 1) tempOffset = (settings.offsetTemp2 ?: 0.0) as BigDecimal
@@ -290,8 +308,8 @@ Map getIndoorAverageData(tempSensors, humSensors) {
                 BigDecimal adjustedH = rawH != null ? ((rawH as BigDecimal) + humOffset).setScale(1, BigDecimal.ROUND_HALF_UP) : null
                 if (adjustedH != null) validHums << adjustedH
 
-                String humStr = adjustedH != null ? " (${adjustedH}%, brut: ${rawH}%)" : ""
-                sensorDetails << "${dev.displayName}: ${adjustedT}°C [brut: ${rawT}°C]${humStr}"
+                String humStr = adjustedH != null ? " (${adjustedH}%)" : ""
+                sensorDetails << "${dev.displayName}: ${adjustedT}°C${humStr}"
             } else {
                 excluded << "${dev.displayName} (valeur aberrante: ${adjustedT}°C)"
             }
@@ -304,16 +322,28 @@ Map getIndoorAverageData(tempSensors, humSensors) {
     BigDecimal avgTemp = (validTemps.sum() / validTemps.size()).setScale(2, BigDecimal.ROUND_HALF_UP)
     BigDecimal avgHum = validHums.isEmpty() ? 50.0 : (validHums.sum() / validHums.size()).setScale(1, BigDecimal.ROUND_HALF_UP)
     
-    String summaryStr = sensorDetails.join(" | ")
-
     return [
         temperature: avgTemp,
         humidity: avgHum,
         dewPoint: calculateDewPoint(avgTemp, avgHum),
         activeCount: validTemps.size(),
         excludedNames: excluded.unique(),
-        detailsSummary: summaryStr
+        detailsSummary: sensorDetails.join(" | ")
     ]
+}
+
+Map getAirQualityData(airSensors) {
+    if (!airSensors) return null
+    List<Integer> co2Values = []
+    airSensors.each { dev ->
+        def co2 = dev.currentValue("carbonDioxide")
+        if (co2 != null) {
+            co2Values << (co2 as Integer)
+        }
+    }
+    if (co2Values.isEmpty()) return null
+    int avgCo2 = (co2Values.sum() / co2Values.size()) as int
+    return [co2: avgCo2]
 }
 
 BigDecimal calculateDewPoint(BigDecimal tempC, BigDecimal relHum) {
@@ -341,10 +371,7 @@ def handleStaleSensorNotifications(List<String> currentExcluded) {
 def sendTargetedSms(String message) {
     log.info message
     List activeSms = getActiveSmsDevices()
-    if (activeSms.isEmpty()) {
-        log.info "[ThermalManager] SMS suspendu : aucun membre de la famille n'est présent à la maison."
-        return
-    }
+    if (activeSms.isEmpty()) return
 
     if (settings.allowedModes && !settings.allowedModes.contains(location.currentMode)) return
 
@@ -352,11 +379,7 @@ def sendTargetedSms(String message) {
     long lastSent = state.lastSmsTimestamp ?: 0L
 
     if ((now() - lastSent) >= minWaitMs) {
-        activeSms.each { smsDev ->
-            smsDev.deviceNotification(message)
-        }
+        activeSms.each { it.deviceNotification(message) }
         state.lastSmsTimestamp = now()
-    } else {
-        log.info "[ThermalManager] SMS anti-spam bloqué (délai minimal non atteint)."
     }
 }
