@@ -84,11 +84,18 @@ def periodicHandler() { recordEvent("Global", "TIMER_60M", "Horloge", "Snapshot"
 // Fonction robuste : retourne 0 si off, ou le niveau réel (1-100) si on
 def getSwitchLevelOrBit(dev) {
     if (!dev) return 0
-    if (dev.currentValue("switch") != "on") return 0
+    
+    // Vérification insensible à la casse ("on", "On", "ON")
+    String switchState = dev.currentValue("switch")?.toString()?.toLowerCase()
+    if (switchState != "on") return 0
+    
+    // Si c'est un variateur (dimmer), on récupère son niveau (0-100)
     if (dev.hasAttribute("level")) {
         def lvl = dev.currentValue("level")
         return lvl != null ? (lvl as Integer) : 100
     }
+    
+    // Pour un interrupteur simple on/off sans dimmer
     return 1
 }
 
