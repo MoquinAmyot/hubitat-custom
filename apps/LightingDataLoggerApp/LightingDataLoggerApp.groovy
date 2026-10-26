@@ -2,7 +2,7 @@ definition(
     name: "Enregistreur de Données d'Éclairage (Google Forms & CSV)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Enregistre l'heure, les données météo/lux et l'état/intensité des switches vers Google Forms et/ou fichier CSV.",
+    description: "Enregistre l'heure, les données météo/lux et l'état/intensité des switches vers Google Forms.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -13,41 +13,47 @@ preferences {
 }
 
 def getDefaultGoogleUrl() {
-    return "VOTRE_NOUVELLE_URL_PRE_REMPLIE_ICI"
+    return "https://docs.google.com/forms/d/e/1FAIpQLSdbLDmjSlE8jnxRu4J_xTMLTiGK2uOjOaRaRPunYixdpi8AOA/viewform?usp=pp_url&entry.1638483558=Zone&entry.1868715799=Type&entry.1027971308=Declencheur&entry.1629850364=Valeur&entry.33299896=Mode&entry.1411099267=LuxAv&entry.169086622=LuxAr&entry.1344018188=Ilot&entry.558560481=Spot&entry.879635431=Armoire&entry.438656806=FAm&entry.880421055=Diner&entry.1552842943=Foyer&entry.593558930=Salon&entry.1713371477=Cloud&entry.348510840=Illu&entry.2127039020=UV&entry.925795843=Hum&entry.1410502511=Pres&entry.660655667=Vnet"
 }
 
 def mainPage() {
     dynamicPage(name: "mainPage", title: "Collecte de Données : Lumières, Heures, Lux & Météo", install: true, uninstall: true) {
         
         section("1. Station Météo & Capteurs Lux Extérieurs") {
-            input "weatherDevice", "capability.illuminanceMeasurement", title: "Appareil Météo (Cloud, UV, Humidité, Pression, Lux ext.)", required: true, multiple: false
+            input "weatherDevice", "capability.illuminanceMeasurement", title: "Appareil Météo", required: true, multiple: false
             input "hueBack", "capability.illuminanceMeasurement", title: "Capteur Hue Arrière (Lux)", required: true, multiple: false
             input "hueFront", "capability.illuminanceMeasurement", title: "Capteur Hue Avant (Lux)", required: true, multiple: false
         }
 
-        section("2. Zone Arrière (Cuisine, Dînette & Salle familiale)") {
-            input "kitchenIlotSwitch", "capability.switchLevel", title: "Cuisine - Îlot (Dimmer)", required: true, multiple: false
-            input "kitchenSpotsSwitch", "capability.switchLevel", title: "Cuisine - Spots (Dimmer)", required: true, multiple: false
-            input "kitchenUnderCabSwitch", "capability.switch", title: "Cuisine - Sous les armoires", required: true, multiple: false
-            input "familySwitch", "capability.switch", title: "Salle familiale (1 switch)", required: true, multiple: false
+        section("2. Zone Arrière (Cuisine & Famille)") {
+            input "kitchenIlotSwitch", "capability.switchLevel", title: "Cuisine - Îlot", required: true, multiple: false
+            input "kitchenSpotsSwitch", "capability.switchLevel", title: "Cuisine - Spots", required: true, multiple: false
+            input "kitchenUnderCabSwitch", "capability.switch", title: "Cuisine - Sous armoires", required: true, multiple: false
+            input "familySwitch", "capability.switch", title: "Salle familiale", required: true, multiple: false
         }
         
-        section("3. Zone Avant (Salle à dîner & Salon)") {
-            input "diningSwitch", "capability.switch", title: "Salle à dîner (1 switch)", required: true, multiple: false
+        section("3. Zone Avant (Dîner & Salon)") {
+            input "diningSwitch", "capability.switch", title: "Salle à dîner", required: true, multiple: false
             input "livingFoyerSwitch", "capability.switch", title: "Salon - Foyer", required: true, multiple: false
-            input "livingSpotsSwitch", "capability.switchLevel", title: "Salon - Spots (Dimmer)", required: true, multiple: false
+            input "livingSpotsSwitch", "capability.switchLevel", title: "Salon - Spots", required: true, multiple: false
         }
         
         section("4. Intégration Google Forms") {
             input "enableGoogleForm", "bool", title: "Envoyer les données vers Google Forms ?", defaultValue: true, submitOnChange: true
             if (settings.enableGoogleForm != false) {
-                input "googlePrefilledUrl", "text", title: "URL pré-remplie de votre nouveau Google Form", required: true, defaultValue: getDefaultGoogleUrl(), submitOnChange: true
+                input "googlePrefilledUrl", "text", title: "URL pré-remplie de votre Google Form", required: true, defaultValue: getDefaultGoogleUrl(), submitOnChange: true
+                input "sendTestNow", "bool", title: "Cochez pour envoyer une ligne de test immédiate", defaultValue: false, submitOnChange: true
             }
         }
 
-        section("5. Options d'enregistrement") {
-            input "logPeriodic", "bool", title: "Enregistrer un relevé automatique toutes les heures (60 minutes) ?", defaultValue: true
-            input "saveToFile", "bool", title: "Sauvegarder AUSSI dans un fichier CSV local ?", defaultValue: false, submitOnChange: true
+        if (settings.sendTestNow) {
+            app.updateSetting("sendTestNow", [value: "false", type: "bool"])
+            recordEvent("Global", "TEST_MANUEL", "Interface_Hubitat", "Test_OK")
+            section { paragraph "<span style='color:blue; font-weight:bold;'>✓ Ligne de test envoyée !</span>" }
+        }
+
+        section("5. Options") {
+            input "logPeriodic", "bool", title: "Enregistrer un relevé automatique toutes les 60 minutes ?", defaultValue: true
         }
     }
 }
@@ -68,31 +74,24 @@ def initialize() {
     if (logPeriodic) {
         runEvery1H(periodicHandler)
     }
+    log.info("LightingDataLoggerApp initialisé avec succès.")
 }
 
 def backSwitchHandler(evt) { recordEvent("Arriere", "SWITCH", evt.displayName, evt.value) }
 def frontSwitchHandler(evt) { recordEvent("Avant", "SWITCH", evt.displayName, evt.value) }
 def periodicHandler() { recordEvent("Global", "TIMER_60M", "Horloge", "Snapshot") }
 
-// Retourne 0 si éteint, ou le niveau réel (1-100) si c'est un dimmer, ou 1/0 pour un switch simple
-def getSwitchLevelOrBit(dev, evt) {
+// Fonction robuste : retourne 0 si off, ou le niveau réel (1-100) si on
+def getSwitchLevelOrBit(dev) {
     if (!dev) return 0
-    
-    // Si l'événement vient de cet appareil et concerne le switch, on regarde sa valeur en direct
-    if (evt && evt.device && evt.device.id == dev.id && evt.name == "switch") {
-        if (evt.value != "on") return 0
-    } else {
-        // Sinon (pour le snapshot horaire par exemple), on vérifie l'état actuel
-        if (dev.currentValue("switch") != "on") return 0
-    }
-    
-    // Si c'est un dimmer, on cherche son niveau actuel
+    if (dev.currentValue("switch") != "on") return 0
     if (dev.hasAttribute("level")) {
         def lvl = dev.currentValue("level")
         return lvl != null ? (lvl as Integer) : 100
     }
     return 1
 }
+
 def parseGoogleFormUrl(String rawUrl) {
     def result = [valid: false, baseUrl: "", entries: []]
     if (!rawUrl) return result
@@ -112,17 +111,9 @@ def parseGoogleFormUrl(String rawUrl) {
 
 def recordEvent(String zone, String triggerType, String deviceName, String actionValue) {
     Date now = new Date()
-    def tz = location.timeZone
     
-    def dateStr = now.format("yyyy-MM-dd", tz)
-    def dayOfWeek = now.format("EEEE", tz)
-    def timeStr = now.format("HH:mm:ss", tz)
-    int hour = now.format("H", tz) as int
-    int minute = now.format("m", tz) as int
-    String decHour = String.format(Locale.US, "%.2f", hour + (minute / 60.0))
-    
-    def luxBack = hueBack ? hueBack.currentValue("illuminance") : ""
     def luxFront = hueFront ? hueFront.currentValue("illuminance") : ""
+    def luxBack = hueBack ? hueBack.currentValue("illuminance") : ""
     
     def cloudCover = weatherDevice ? weatherDevice.currentValue("cloud") : ""
     def luxMeteo = weatherDevice ? weatherDevice.currentValue("illuminance") : ""
@@ -133,7 +124,6 @@ def recordEvent(String zone, String triggerType, String deviceName, String actio
     
     def currentMode = location.currentMode
     
-    // Récupération des niveaux (0 à 100 pour les dimmers, 0 ou 1 pour les switches)
     int kIlot = getSwitchLevelOrBit(kitchenIlotSwitch)
     int kSpots = getSwitchLevelOrBit(kitchenSpotsSwitch)
     int kCab = getSwitchLevelOrBit(kitchenUnderCabSwitch)
@@ -146,7 +136,7 @@ def recordEvent(String zone, String triggerType, String deviceName, String actio
         String activeUrl = settings.googlePrefilledUrl ?: getDefaultGoogleUrl()
         def valuesList = [
             zone, triggerType, deviceName, actionValue, "${currentMode}",
-            "${luxFront}", "${luxBack}", // Assurez-vous de l'ordre de vos colonnes dans le Form
+            "${luxFront}", "${luxBack}",
             "${kIlot}", "${kSpots}", "${kCab}", "${fam}", "${din}", "${livFoyer}", "${livSpots}",
             "${cloudCover}", "${luxMeteo}", "${uvIndex}", "${extHum}", "${pressure}", "${wind}"
         ]
