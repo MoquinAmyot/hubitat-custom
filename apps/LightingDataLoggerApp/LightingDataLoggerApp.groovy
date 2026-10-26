@@ -117,10 +117,10 @@ def initialize() {
     subscribe(livingSpotsSwitch, "switch", frontSwitchHandler)
     
     // Abonnement aux capteurs de Lux
-    if (logLuxChanges) {
-        subscribe(hueBack, "illuminance", backLuxHandler)
-        subscribe(hueFront, "illuminance", frontLuxHandler)
-    }
+    // if (logLuxChanges) {
+    //    subscribe(hueBack, "illuminance", backLuxHandler)
+    //    subscribe(hueFront, "illuminance", frontLuxHandler)
+    // }
     
 // Relevé périodique fixé à 1 heure (60 minutes)
     if (logPeriodic) {
@@ -137,13 +137,13 @@ def frontSwitchHandler(evt) {
     recordEvent("Avant", "SWITCH", evt.displayName, evt.value)
 }
 
-def backLuxHandler(evt) {
-    recordEvent("Arriere", "LUX_UPDATE", evt.displayName, "${evt.value}")
-}
+//def backLuxHandler(evt) {
+//    recordEvent("Arriere", "LUX_UPDATE", evt.displayName, "${evt.value}")
+//}
 
-def frontLuxHandler(evt) {
-    recordEvent("Avant", "LUX_UPDATE", evt.displayName, "${evt.value}")
-}
+//def frontLuxHandler(evt) {
+ //   recordEvent("Avant", "LUX_UPDATE", evt.displayName, "${evt.value}")
+//}
 
 def periodicHandler() {
     recordEvent("Global", "TIMER_15M", "Horloge", "Snapshot")
