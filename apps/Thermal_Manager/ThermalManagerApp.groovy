@@ -2,7 +2,7 @@ definition(
     name: "Gestionnaire Thermique (Delta T, Rosée, 4 Membres & Offsets)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Gestion complete : Ecarts internes, Free Cooling, Offsets, CO2 Max, Humidite, Google Forms et SMS 4 membres.",
+    description: "Gestion complète : Écarts internes, Free Cooling, Offsets, CO2 Max, Humidité, Google Forms et SMS 4 membres.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -13,10 +13,10 @@ preferences {
 }
 
 def mainPage() {
-    dynamicPage(name: "mainPage", title: "Configuration du Gestionnaire Thermique et Air", install: true, uninstall: true) {
+    dynamicPage(name: "mainPage", title: "Configuration du Gestionnaire Thermique & Air", install: true, uninstall: true) {
         
         if (settings.outdoorWeather && settings.indoorTempSensors) {
-            section("Etat Thermique, Air et Humidite Actuel") {
+            section("📊 État Thermique, Air & Humidité Actuel") {
                 Map ext = getOutdoorWeatherData(settings.outdoorWeather)
                 Map ind = getIndoorAverageData(settings.indoorTempSensors, settings.indoorHumSensors)
                 Map air = getAirQualityData(settings.airQualitySensors)
@@ -26,112 +26,112 @@ def mainPage() {
                     BigDecimal deltaDew = (ind.dewPoint - ext.dewPoint).setScale(2, BigDecimal.ROUND_HALF_UP)
                     List activeRecipients = getActiveSmsDevices()
                     
-                    paragraph "Interieur : Moyenne " + ind.temperature + " C (Ecart: " + ind.tempSpread + " C) - Humidite: " + ind.humidity + " % - Point de rosee: " + ind.dewPoint + " C"
-                    paragraph "Detail capteurs : " + ind.detailsSummary
+                    paragraph "Intérieur : Moyenne " + ind.temperature + " °C (Écart: " + ind.tempSpread + " °C) | Humidité: " + ind.humidity + " % | Point de rosée: " + ind.dewPoint + " °C"
+                    paragraph "Détail capteurs : " + ind.detailsSummary
                     if (air) {
-                        paragraph "Qualite Air (CO2 Max) : " + air.co2Max + " ppm (Moyenne: " + air.co2Avg + " ppm)"
+                        paragraph "Qualité Air (CO2 Max) : " + air.co2Max + " ppm (Moyenne: " + air.co2Avg + " ppm)"
                     }
-                    paragraph "Exterieur : " + ext.temperature + " C - Humidite: " + (ext.humidity ?: "N/A") + " % - Point de rosee: " + ext.dewPoint + " C"
-                    paragraph "Ecarts (Int - Ext) : Delta T = " + deltaT + " C - Delta PR = " + deltaDew + " C"
+                    paragraph "Extérieur : " + ext.temperature + " °C | Humidité: " + (ext.humidity ?: "N/A") + " % | Point de rosée: " + ext.dewPoint + " °C"
+                    paragraph "Écarts (Int - Ext) : Delta T = " + deltaT + " °C | Delta PR = " + deltaDew + " °C"
                     paragraph "Destinataires SMS actifs : " + (activeRecipients ? (activeRecipients.size() + " personne(s)") : "Personne")
-                    paragraph "Etat actuel : " + (state.currentAdvice ?: "En attente")
+                    paragraph "État actuel : " + (state.currentAdvice ?: "En attente")
                     
                     if (ind.excludedNames && ind.excludedNames.size() > 0) {
                         paragraph "Attention - Capteur(s) exclu(s) : " + ind.excludedNames.join(", ")
                     }
                 } else {
-                    paragraph "Donnees meteo ou interieures indisponibles."
+                    paragraph "Données météo ou intérieures indisponibles."
                 }
             }
         }
 
-        section("1. Meteo Exterieure") {
-            input "outdoorWeather", "capability.temperatureMeasurement", title: "Dispositif Meteo Exterieur", required: true, multiple: false
+        section("1. Météo Extérieure") {
+            input "outdoorWeather", "capability.temperatureMeasurement", title: "Dispositif Météo Extérieur", required: true, multiple: false
         }
         
-        section("2. Capteurs Interieurs et Offsets de Calibrage") {
-            input "indoorTempSensors", "capability.temperatureMeasurement", title: "Capteurs de Temperature interieurs", required: true, multiple: true
-            input "indoorHumSensors", "capability.relativeHumidityMeasurement", title: "Capteurs d Humidite interieurs", required: false, multiple: true
+        section("2. Capteurs Intérieurs & Offsets") {
+            input "indoorTempSensors", "capability.temperatureMeasurement", title: "Capteurs de Température", required: true, multiple: true
+            input "indoorHumSensors", "capability.relativeHumidityMeasurement", title: "Capteurs d'Humidité", required: false, multiple: true
             
-            input "offsetTemp1", "decimal", title: "Offset Temperature Capteur 1 (C)", required: false, defaultValue: 0.0
-            input "offsetHum1", "decimal", title: "Offset Humidite Capteur 1 (%)", required: false, defaultValue: 0.0
-            input "offsetTemp2", "decimal", title: "Offset Temperature Capteur 2 (C)", required: false, defaultValue: 0.0
-            input "offsetHum2", "decimal", title: "Offset Humidite Capteur 2 (%)", required: false, defaultValue: 0.0
-            input "offsetTemp3", "decimal", title: "Offset Temperature Capteur 3 (C)", required: false, defaultValue: 0.0
-            input "offsetHum3", "decimal", title: "Offset Humidite Capteur 3 (%)", required: false, defaultValue: 0.0
-            input "offsetTemp4", "decimal", title: "Offset Temperature Capteur 4 (C)", required: false, defaultValue: 0.0
-            input "offsetHum4", "decimal", title: "Offset Humidite Capteur 4 (%)", required: false, defaultValue: 0.0
-            input "offsetTemp5", "decimal", title: "Offset Temperature Capteur 5 (C)", required: false, defaultValue: 0.0
-            input "offsetHum5", "decimal", title: "Offset Humidite Capteur 5 (%)", required: false, defaultValue: 0.0
+            input "offsetTemp1", "decimal", title: "Offset Temp 1", required: false, defaultValue: 0.0
+            input "offsetHum1", "decimal", title: "Offset Hum 1", required: false, defaultValue: 0.0
+            input "offsetTemp2", "decimal", title: "Offset Temp 2", required: false, defaultValue: 0.0
+            input "offsetHum2", "decimal", title: "Offset Hum 2", required: false, defaultValue: 0.0
+            input "offsetTemp3", "decimal", title: "Offset Temp 3", required: false, defaultValue: 0.0
+            input "offsetHum3", "decimal", title: "Offset Hum 3", required: false, defaultValue: 0.0
+            input "offsetTemp4", "decimal", title: "Offset Temp 4", required: false, defaultValue: 0.0
+            input "offsetHum4", "decimal", title: "Offset Hum 4", required: false, defaultValue: 0.0
+            input "offsetTemp5", "decimal", title: "Offset Temp 5", required: false, defaultValue: 0.0
+            input "offsetHum5", "decimal", title: "Offset Hum 5", required: false, defaultValue: 0.0
         }
 
-        section("3. Qualite de l Air (CO2)") {
+        section("3. Qualité de l'Air (CO2)") {
             input "airQualitySensors", "capability.carbonDioxideMeasurement", title: "Capteurs de CO2", required: false, multiple: true
-            input "maxCo2Threshold", "number", title: "Seuil de CO2 maximal (ppm)", defaultValue: 1000, required: true
+            input "maxCo2Threshold", "number", title: "Seuil CO2 maximal (ppm)", defaultValue: 1000, required: true
         }
 
-        section("4. Ecarts Internes, Humidite et Hiver") {
-            input "maxInternalTempSpread", "decimal", title: "Ecart max entre pieces (C)", defaultValue: 2.0, required: true
-            input "maxHumidityThreshold", "decimal", title: "Seuil humidite max (%)", defaultValue: 60.0, required: true
-            input "minHumidityThreshold", "decimal", title: "Seuil humidite min (%)", defaultValue: 30.0, required: true
-            input "minOutdoorTempForCooling", "decimal", title: "Temperature exterieure min (C)", defaultValue: -10.0, required: true
+        section("4. Écarts Internes, Humidité & Hiver") {
+            input "maxInternalTempSpread", "decimal", title: "Écart max entre pièces (°C)", defaultValue: 2.0, required: true
+            input "maxHumidityThreshold", "decimal", title: "Seuil humidité max (%)", defaultValue: 60.0, required: true
+            input "minHumidityThreshold", "decimal", title: "Seuil humidité min (%)", defaultValue: 30.0, required: true
+            input "minOutdoorTempForCooling", "decimal", title: "Température extérieure min (°C)", defaultValue: -10.0, required: true
         }
 
         section("5. Gestion de la Famille (4 Membres)") {
-            input "pres1", "capability.presenceSensor", title: "Presence Benoit", required: true, multiple: false
+            input "pres1", "capability.presenceSensor", title: "Présence Benoit", required: true, multiple: false
             input "sms1", "capability.notification", title: "SMS Benoit", required: true, multiple: false
-            input "pres2", "capability.presenceSensor", title: "Presence Membre 2", required: false, multiple: false
+            input "pres2", "capability.presenceSensor", title: "Présence Membre 2", required: false, multiple: false
             input "sms2", "capability.notification", title: "SMS Membre 2", required: false, multiple: false
-            input "pres3", "capability.presenceSensor", title: "Presence Membre 3", required: false, multiple: false
+            input "pres3", "capability.presenceSensor", title: "Présence Membre 3", required: false, multiple: false
             input "sms3", "capability.notification", title: "SMS Membre 3", required: false, multiple: false
-            input "pres4", "capability.presenceSensor", title: "Presence Membre 4", required: false, multiple: false
+            input "pres4", "capability.presenceSensor", title: "Présence Membre 4", required: false, multiple: false
             input "sms4", "capability.notification", title: "SMS Membre 4", required: false, multiple: false
         }
         
-        section("6. Securite Capteurs") {
-            input "maxIndoorInactivityHours", "number", title: "Exclure interieur si muet depuis (h)", defaultValue: 4, required: true
-            input "maxWeatherInactivityHours", "number", title: "Suspendre meteo si muette depuis (h)", defaultValue: 3, required: true
-            input "notifyOnStaleSensor", "bool", title: "Alerter si capteur decroche ?", defaultValue: true
+        section("6. Sécurité Capteurs") {
+            input "maxIndoorInactivityHours", "number", title: "Exclure intérieur si muet (h)", defaultValue: 4, required: true
+            input "maxWeatherInactivityHours", "number", title: "Suspendre météo si muette (h)", defaultValue: 3, required: true
+            input "notifyOnStaleSensor", "bool", title: "Alerter si capteur décroche ?", defaultValue: true
         }
         
         section("7. Seuils Free Cooling") {
-            input "minIndoorTempForCooling", "decimal", title: "Temp interieure min pour ouvrir (C)", defaultValue: 22.5, required: true
-            input "minDeltaT", "decimal", title: "Delta T minimal requis (C)", defaultValue: 1.5, required: true
-            input "maxOutdoorDewPoint", "decimal", title: "Point de rosee ext max (C)", defaultValue: 16.0, required: true
-            input "requireLowerOutdoorDewPoint", "bool", title: "PR ext inferieur au PR int ?", defaultValue: true
-            input "hysteresisTemp", "decimal", title: "Hysteresis (C)", defaultValue: 0.5, required: true
+            input "minIndoorTempForCooling", "decimal", title: "Temp intérieure min (°C)", defaultValue: 22.5, required: true
+            input "minDeltaT", "decimal", title: "Delta T minimal (°C)", defaultValue: 1.5, required: true
+            input "maxOutdoorDewPoint", "decimal", title: "Point de rosée ext max (°C)", defaultValue: 16.0, required: true
+            input "requireLowerOutdoorDewPoint", "bool", title: "PR ext inférieur au PR int ?", defaultValue: true
+            input "hysteresisTemp", "decimal", title: "Hystérésis (°C)", defaultValue: 0.5, required: true
         }
 
         section("8. Ventilation") {
             input "thermostatDevice", "capability.thermostat", title: "Thermostat Ecobee", required: false, multiple: false
-            input "fanSwitch", "capability.switch", title: "Interrupteur Echangeur", required: false, multiple: false
-            input "contactSensors", "capability.contactSensor", title: "Capteurs de fenetres", required: false, multiple: true
+            input "fanSwitch", "capability.switch", title: "Interrupteur Échangeur", required: false, multiple: false
+            input "contactSensors", "capability.contactSensor", title: "Capteurs de fenêtres", required: false, multiple: true
         }
 
         section("9. Google Forms") {
             input "enableGoogleLogging", "bool", title: "Activer Google Forms", defaultValue: false
             input "googleFormUrl", "text", title: "URL formResponse", required: false
-            input "entryInTemp", "text", title: "Entry Temp Interieure", required: false
-            input "entryInHum", "text", title: "Entry Hum Interieure", required: false
-            input "entryInDew", "text", title: "Entry PR Interieur", required: false
-            input "entryExtTemp", "text", title: "Entry Temp Exterieure", required: false
-            input "entryExtHum", "text", title: "Entry Hum Exterieure", required: false
-            input "entryExtDew", "text", title: "Entry PR Exterieur", required: false
+            input "entryInTemp", "text", title: "Entry Temp Intérieure", required: false
+            input "entryInHum", "text", title: "Entry Hum Intérieure", required: false
+            input "entryInDew", "text", title: "Entry PR Intérieur", required: false
+            input "entryExtTemp", "text", title: "Entry Temp Extérieure", required: false
+            input "entryExtHum", "text", title: "Entry Hum Extérieure", required: false
+            input "entryExtDew", "text", title: "Entry PR Extérieur", required: false
             input "entryCo2Max", "text", title: "Entry CO2 Max", required: false
-            input "entryAdvice", "text", title: "Entry Decision", required: false
+            input "entryAdvice", "text", title: "Entry Décision", required: false
         }
 
-        section("10. SMS et Frequence") {
-            input "allowedModes", "mode", title: "Modes autorises", required: false, multiple: true
-            input "minMinutesBetweenSms", "number", title: "Delai anti-spam SMS (min)", defaultValue: 120, required: true
-            input "evalIntervalMinutes", "enum", title: "Frequence evaluation", options: ["5": "5 min", "10": "10 min", "15": "15 min", "30": "30 min"], defaultValue: "15", required: true
-            input "runEvalNow", "bool", title: "Forcer evaluation immediate", defaultValue: false, submitOnChange: true
+        section("10. SMS & Fréquence") {
+            input "allowedModes", "mode", title: "Modes autorisés", required: false, multiple: true
+            input "minMinutesBetweenSms", "number", title: "Délai SMS (min)", defaultValue: 120, required: true
+            input "evalIntervalMinutes", "enum", title: "Fréquence évaluation", options: ["5": "5 min", "10": "10 min", "15": "15 min", "30": "30 min"], defaultValue: "15", required: true
+            input "runEvalNow", "bool", title: "Forcer évaluation", defaultValue: false, submitOnChange: true
         }
 
         if (settings.runEvalNow) {
             app.updateSetting("runEvalNow", [value: "false", type: "bool"])
             evaluateThermalConditions()
-            section { paragraph "Evaluation executee." }
+            section { paragraph "Évaluation exécutée." }
         }
     }
 }
@@ -141,7 +141,7 @@ def updated() { unschedule(); unsubscribe(); initialize() }
 
 def initialize() {
     if (state.currentlyFavorable == null) state.currentlyFavorable = false
-    if (state.currentAdvice == null) state.currentAdvice = "Initialise"
+    if (state.currentAdvice == null) state.currentAdvice = "Initialisé"
     if (state.alertedStaleDevices == null) state.alertedStaleDevices = []
     if (state.dryAirAlertSent == null) state.dryAirAlertSent = false
 
@@ -220,10 +220,10 @@ def evaluateThermalConditions() {
 
     if (isFavorableThermal && !wasFavorable) {
         state.currentlyFavorable = true
-        sendTargetedSms("Ouvrir les fenetres / Free Cooling : Int " + inTemp + "C vs Ext " + extTemp + "C.")
+        sendTargetedSms("Ouvrir les fenêtres / Free Cooling : Int " + inTemp + "°C vs Ext " + extTemp + "°C.")
     } else if (!isFavorableThermal && wasFavorable) {
         state.currentlyFavorable = false
-        sendTargetedSms("Fermer les fenetres : Int " + inTemp + "C vs Ext " + extTemp + "C.")
+        sendTargetedSms("Fermer les fenêtres : Int " + inTemp + "°C vs Ext " + extTemp + "°C.")
     }
 
     int co2Threshold = (settings.maxCo2Threshold ?: 1000) as int
@@ -235,7 +235,7 @@ def evaluateThermalConditions() {
     BigDecimal minHumLimit = (settings.minHumidityThreshold ?: 30.0) as BigDecimal
     if (inHum < minHumLimit) {
         if (!state.dryAirAlertSent) {
-            sendTargetedSms("Alerte Air Sec : Humidite interieure a " + inHum + "%.")
+            sendTargetedSms("Alerte Air Sec : Humidité intérieure à " + inHum + "%.")
             state.dryAirAlertSent = true
         }
     } else if (inHum >= (minHumLimit + 2.0)) {
@@ -247,13 +247,13 @@ def evaluateThermalConditions() {
     if (isFavorableThermal) {
         state.currentAdvice = "VENTILATION ACTIVE (Free Cooling)"
     } else if (highCo2) {
-        state.currentAdvice = "VENTILATION FORCEE (CO2 Max: " + air.co2Max + " ppm)"
+        state.currentAdvice = "VENTILATION FORCÉE (CO2 Max: " + air.co2Max + " ppm)"
     } else if (tooHumid) {
-        state.currentAdvice = "VENTILATION FORCEE (Trop humide: " + inHum + "%)"
+        state.currentAdvice = "VENTILATION FORCÉE (Trop humide: " + inHum + "%)"
     } else if (needInternalMixing) {
-        state.currentAdvice = "BRASSAGE ACTIF (Ecart pieces: " + inSpread + "C)"
+        state.currentAdvice = "BRASSAGE ACTIF (Écart pièces: " + inSpread + "°C)"
     } else {
-        state.currentAdvice = "VENTILATION ARRETEE"
+        state.currentAdvice = "VENTILATION ARRÊTÉE"
     }
 
     manageVentilation(finalVentilationNeeded)
@@ -347,7 +347,7 @@ Map getIndoorAverageData(tempSensors, humSensors) {
                 def rawH = dev.hasAttribute("humidity") ? dev.currentValue("humidity") : null
                 BigDecimal adjustedH = rawH != null ? ((rawH as BigDecimal) + getHumOffsetForIndex(index)).setScale(1, BigDecimal.ROUND_HALF_UP) : null
                 if (adjustedH != null) validHums << adjustedH
-                sensorDetails << (dev.displayName + ": " + adjustedT + "C")
+                sensorDetails << (dev.displayName + ": " + adjustedT + "°C")
             } else {
                 excluded << dev.displayName
             }
@@ -358,4 +358,67 @@ Map getIndoorAverageData(tempSensors, humSensors) {
 
     humSensors?.each { dev ->
         if (!tempSensors?.find { it.id == dev.id }) {
-            if (isDeviceResponsive(dev, maxHours) && dev.currentValue("humidity") != null)
+            if (isDeviceResponsive(dev, maxHours) && dev.currentValue("humidity") != null) {
+                validHums << (dev.currentValue("humidity") as BigDecimal)
+            }
+        }
+    }
+
+    if (validTemps.isEmpty()) return null
+    BigDecimal avgTemp = (validTemps.sum() / validTemps.size()).setScale(2, BigDecimal.ROUND_HALF_UP)
+    BigDecimal avgHum = validHums.isEmpty() ? 50.0 : (validHums.sum() / validHums.size()).setScale(1, BigDecimal.ROUND_HALF_UP)
+    BigDecimal spread = (validTemps.size() > 1) ? (validTemps.max() - validTemps.min()).setScale(2, BigDecimal.ROUND_HALF_UP) : 0.0
+    
+    return [temperature: avgTemp, humidity: avgHum, dewPoint: calculateDewPoint(avgTemp, avgHum), tempSpread: spread, activeCount: validTemps.size(), excludedNames: excluded.unique(), detailsSummary: sensorDetails.join(" / ")]
+}
+
+Map getAirQualityData(airSensors) {
+    if (!airSensors) return null
+    int maxHours = (settings.maxIndoorInactivityHours ?: 4) as int
+    List<Integer> co2Values = []
+    List<String> details = []
+    airSensors.each { dev ->
+        if (isDeviceResponsive(dev, maxHours)) {
+            def co2 = dev.currentValue("carbonDioxide")
+            if (co2 != null) {
+                int val = co2 as Integer
+                co2Values << val
+                details << (dev.displayName + ": " + val)
+            }
+        }
+    }
+    if (co2Values.isEmpty()) return null
+    return [co2Max: co2Values.max() as int, co2Avg: (co2Values.sum() / co2Values.size()) as int, details: details.join(", ")]
+}
+
+BigDecimal calculateDewPoint(BigDecimal tempC, BigDecimal relHum) {
+    double t = tempC as double
+    double rh = Math.max(1.0d, Math.min(100.0d, relHum as double))
+    double a = 17.62d, b = 243.12d
+    double alpha = ((a * t) / (b + t)) + Math.log(rh / 100.0d)
+    return new BigDecimal((b * alpha) / (a - alpha)).setScale(2, BigDecimal.ROUND_HALF_UP)
+}
+
+def handleStaleSensorNotifications(List<String> currentExcluded) {
+    if (!settings.notifyOnStaleSensor) return
+    List activeSms = getActiveSmsDevices()
+    if (activeSms.isEmpty()) return
+    List<String> prev = state.alertedStaleDevices ?: []
+    List<String> newlyStale = currentExcluded - prev
+    if (newlyStale.size() > 0) {
+        activeSsm.each { it.deviceNotification("Capteur(s) exclu(s) : " + newlyStale.join(", ")) }
+    }
+    state.alertedStaleDevices = currentExcluded
+}
+
+def sendTargetedSms(String message) {
+    List activeSms = getActiveSmsDevices()
+    if (activeSms.isEmpty()) return
+    if (settings.allowedModes && !settings.allowedModes.contains(location.currentMode)) return
+    long minWaitMs = ((settings.minMinutesBetweenSms ?: 120) as long) * 60000L
+    long lastSent = state.lastSmsTimestamp ?: 0L
+    if ((now() - lastSent) >= minWaitMs) {
+        activeSms.each { it.deviceNotification(message) }
+        state.lastSsmTimestamp = now()
+    }
+}
