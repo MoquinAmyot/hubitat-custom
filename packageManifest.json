@@ -1,7 +1,7 @@
 {
   "packageName": "Benoit Hubitat Custom Suite",
   "author": "Benoit Tremblay",
-  "version": "1.0.41",
+  "version": "1.0.42",
   "minimumHEVersion": "2.3.0",
   "dateReleased": "2026-10-20",
   "apps": [
