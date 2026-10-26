@@ -2,7 +2,7 @@ definition(
     name: "Enregistreur de Données d'Éclairage (Google Forms & CSV)",
     namespace: "custom",
     author: "Benoit Tremblay",
-    description: "Enregistre l'heure, les Lux Hue et l'état des 7 switches (Avant/Arrière) vers Google Forms (Google Sheets) et/ou fichier CSV local.",
+    description: "Enregistre l'heure, les données météo/lux et l'état des switches vers Google Forms (Google Sheets) et/ou fichier CSV local.",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: ""
@@ -17,37 +17,40 @@ def getDefaultGoogleUrl() {
 }
 
 def mainPage() {
-    dynamicPage(name: "mainPage", title: "Collecte de Données : Lumières, Heures & Lux", install: true, uninstall: true) {
+    dynamicPage(name: "mainPage", title: "Collecte de Données : Lumières, Heures, Lux & Météo", install: true, uninstall: true) {
         
-        section("1. Zone Arrière (Est-Sud-Est : Cuisine, Dînette & Salle familiale)") {
+        section("1. Station Météo & Capteurs Lux Extérieurs") {
+            input "weatherDevice", "capability.illuminanceMeasurement", title: "Appareil Météo (pour Cloud, UV, Humidité, Pression, Lux ext.)", required: true, multiple: false
             input "hueBack", "capability.illuminanceMeasurement", title: "Capteur Hue Arrière (Lux)", required: true, multiple: false
+            input "hueFront", "capability.illuminanceMeasurement", title: "Capteur Hue Avant (Lux)", required: true, multiple: false
+        }
+
+        section("2. Zone Arrière (Cuisine, Dînette & Salle familiale)") {
             input "kitchenIlotSwitch", "capability.switch", title: "Cuisine - Îlot", required: true, multiple: false
             input "kitchenSpotsSwitch", "capability.switch", title: "Cuisine - Spots", required: true, multiple: false
             input "kitchenUnderCabSwitch", "capability.switch", title: "Cuisine - Sous les armoires", required: true, multiple: false
             input "familySwitch", "capability.switch", title: "Salle familiale (1 switch)", required: true, multiple: false
         }
         
-        section("2. Zone Avant (Ouest-Nord-Ouest : Salle à dîner & Salon)") {
-            input "hueFront", "capability.illuminanceMeasurement", title: "Capteur Hue Avant (Lux)", required: true, multiple: false
+        section("3. Zone Avant (Salle à dîner & Salon)") {
             input "diningSwitch", "capability.switch", title: "Salle à dîner (1 switch)", required: true, multiple: false
             input "livingFoyerSwitch", "capability.switch", title: "Salon - Foyer", required: true, multiple: false
             input "livingSpotsSwitch", "capability.switch", title: "Salon - Spots", required: true, multiple: false
         }
         
-        section("3. Intégration Google Forms (Temps réel vers Google Sheets)") {
+        section("4. Intégration Google Forms (Temps réel vers Google Sheets)") {
             input "enableGoogleForm", "bool", title: "Envoyer les données vers Google Forms ?", defaultValue: true, submitOnChange: true
             if (settings.enableGoogleForm != false) {
-                input "googlePrefilledUrl", "text", title: "URL pré-remplie de votre Google Form (préconfigurée par défaut)", required: true, defaultValue: getDefaultGoogleUrl(), submitOnChange: true
+                input "googlePrefilledUrl", "text", title: "URL pré-remplie de votre Google Form", required: true, defaultValue: getDefaultGoogleUrl(), submitOnChange: true
                 
                 String activeUrl = settings.googlePrefilledUrl ?: getDefaultGoogleUrl()
                 def parsed = parseGoogleFormUrl(activeUrl)
                 if (parsed.valid) {
                     paragraph "<span style='color:green; font-weight:bold;'>✓ URL Google Form valide détectée !</span><br>" +
-                              "URL d'envoi : <code>${parsed.baseUrl}</code><br>" +
                               "Champs détectés : <b>${parsed.entries.size()} colonnes</b>"
-                    input "sendTestNow", "bool", title: "Cochez pour envoyer une ligne de test immédiate vers Google Forms", defaultValue: false, submitOnChange: true
+                    input "sendTestNow", "bool", title: "Cochez pour envoyer une ligne de test immédiate", defaultValue: false, submitOnChange: true
                 } else {
-                    paragraph "<span style='color:red; font-weight:bold;'>⚠ URL invalide. Assurez-vous qu'elle contient 'docs.google.com/forms/d/e/...' et au moins un 'entry.xxxxx='.</span>"
+                    paragraph "<span style='color:red; font-weight:bold;'>⚠ URL invalide.</span>"
                 }
             }
         }
@@ -55,17 +58,16 @@ def mainPage() {
         if (settings.sendTestNow) {
             app.updateSetting("sendTestNow", [value: "false", type: "bool"])
             recordEvent("Global", "TEST_MANUEL", "Interface_Hubitat", "Test_OK")
-            section { paragraph "<span style='color:blue; font-weight:bold;'>✓ Ligne de test envoyée à Google Forms ! Vérifiez votre Google Sheet.</span>" }
+            section { paragraph "<span style='color:blue; font-weight:bold;'>✓ Ligne de test envoyée à Google Forms !</span>" }
         }
         
-        section("4. Options d'enregistrement & Fichier Local") {
-            input "logLuxChanges", "bool", title: "Enregistrer aussi à chaque changement de Lux des capteurs Hue ?", defaultValue: true
+        section("5. Options d'enregistrement & Fichier Local") {
             input "logPeriodic", "bool", title: "Enregistrer un relevé automatique toutes les heures (60 minutes) ?", defaultValue: true
-            input "saveToFile", "bool", title: "Sauvegarder AUSSI dans un fichier CSV local (File Manager) ?", defaultValue: false, submitOnChange: true
+            input "saveToFile", "bool", title: "Sauvegarder AUSSI dans un fichier CSV local ?", defaultValue: false, submitOnChange: true
             if (settings.saveToFile) {
-                input "monthlyRotation", "bool", title: "Rotation mensuelle du fichier CSV (ex: lighting_data_2026-10.csv) ?", defaultValue: true
+                input "monthlyRotation", "bool", title: "Rotation mensuelle du fichier CSV ?", defaultValue: true
             }
-            input "clearHistory", "bool", title: "Cochez et sauvegardez pour vider l'aperçu en mémoire", defaultValue: false, submitOnChange: true
+            input "clearHistory", "bool", title: "Cochez pour vider l'aperçu en mémoire", defaultValue: false, submitOnChange: true
         }
 
         if (settings.clearHistory) {
@@ -74,7 +76,7 @@ def mainPage() {
             section { paragraph "<b>Aperçu en mémoire effacé.</b>" }
         }
 
-        section("5. Aperçu des 25 derniers événements") {
+        section("6. Aperçu des 25 derniers événements") {
             def entries = state.logEntries ?: []
             if (entries.size() > 0) {
                 def header = getCsvHeader()
@@ -105,28 +107,22 @@ def initialize() {
         app.updateSetting("googlePrefilledUrl", [value: getDefaultGoogleUrl(), type: "text"])
     }
     
-    // Abonnement Zone Arrière (4 switches individuelles)
+    // Abonnements uniquement aux changements d'état des interrupteurs (plus de LUX_UPDATE en continu)
     subscribe(kitchenIlotSwitch, "switch", backSwitchHandler)
     subscribe(kitchenSpotsSwitch, "switch", backSwitchHandler)
     subscribe(kitchenUnderCabSwitch, "switch", backSwitchHandler)
     subscribe(familySwitch, "switch", backSwitchHandler)
     
-    // Abonnement Zone Avant (3 switches individuelles)
     subscribe(diningSwitch, "switch", frontSwitchHandler)
     subscribe(livingFoyerSwitch, "switch", frontSwitchHandler)
     subscribe(livingSpotsSwitch, "switch", frontSwitchHandler)
     
-    // Abonnement aux capteurs de Lux
-    // if (logLuxChanges) {
-    //    subscribe(hueBack, "illuminance", backLuxHandler)
-    //    subscribe(hueFront, "illuminance", frontLuxHandler)
-    // }
-    
-// Relevé périodique fixé à 1 heure (60 minutes)
+    // Relevé périodique fixé à 1 heure (60 minutes)
     if (logPeriodic) {
         runEvery1H(periodicHandler)
-    }    
-    log.info("LightingDataLoggerApp initialisé (Google Form: ${enableGoogleForm}, CSV Local: ${saveToFile}).")
+    }
+    
+    log.info("LightingDataLoggerApp initialisé avec succès (Relevé horaire + Switches).")
 }
 
 def backSwitchHandler(evt) {
@@ -137,20 +133,12 @@ def frontSwitchHandler(evt) {
     recordEvent("Avant", "SWITCH", evt.displayName, evt.value)
 }
 
-//def backLuxHandler(evt) {
-//    recordEvent("Arriere", "LUX_UPDATE", evt.displayName, "${evt.value}")
-//}
-
-//def frontLuxHandler(evt) {
- //   recordEvent("Avant", "LUX_UPDATE", evt.displayName, "${evt.value}")
-//}
-
 def periodicHandler() {
-    recordEvent("Global", "TIMER_15M", "Horloge", "Snapshot")
+    recordEvent("Global", "TIMER_60M", "Horloge", "Snapshot")
 }
 
 def getCsvHeader() {
-    return "Date;Jour;Heure;Heure_Decimale;Zone_Event;Type_Event;Appareil_Declencheur;Valeur;Mode_Hub;Lux_Arriere;Lux_Avant;Cuisine_Ilot;Cuisine_Spots;Cuisine_Sous_Armoires;Nb_Cuisine_ON;Salle_Fam;Salle_Diner;Salon_Foyer;Salon_Spots\n"
+    return "Date;Jour;Heure;Heure_Decimale;Zone_Event;Type_Event;Appareil_Declencheur;Valeur;Mode_Hub;Lux_Arriere;Lux_Avant;Cloud;Lux_Meteo;UV;Humidite_Ext;Pression;Cuisine_Ilot;Cuisine_Spots;Cuisine_Sous_Armoires;Nb_Cuisine_ON;Salle_Fam;Salle_Diner;Salon_Foyer;Salon_Spots\n"
 }
 
 def getActiveFileName() {
@@ -170,11 +158,10 @@ def parseGoogleFormUrl(String rawUrl) {
     if (!rawUrl) return result
     
     String cleanUrl = rawUrl.trim()
-    // Insensible à la casse pour accepter "Https://" ou "https://"
     def baseMatcher = (cleanUrl =~ /(?i)(https:\/\/docs\.google\.com\/forms\/d\/e\/[^\/]+\/)(viewform|formResponse)/)
     if (baseMatcher.find()) {
         String prefix = baseMatcher.group(1)
-        prefix = "https://" + prefix.substring(8) // Normalise en https:// minuscule
+        prefix = "https://" + prefix.substring(8)
         result.baseUrl = prefix + "formResponse"
     }
     
@@ -206,9 +193,16 @@ def recordEvent(String zone, String triggerType, String deviceName, String actio
     
     def luxBack = hueBack ? hueBack.currentValue("illuminance") : ""
     def luxFront = hueFront ? hueFront.currentValue("illuminance") : ""
+    
+    // Récupération des 6 nouvelles métriques météo
+    def cloudCover = weatherDevice ? weatherDevice.currentValue("cloud") : ""
+    def luxMeteo = weatherDevice ? weatherDevice.currentValue("illuminance") : ""
+    def uvIndex = weatherDevice ? weatherDevice.currentValue("ultravioletIndex") : ""
+    def extHum = weatherDevice ? weatherDevice.currentValue("humidity") : ""
+    def pressure = weatherDevice ? weatherDevice.currentValue("pressure") : ""
+    
     def currentMode = location.currentMode
     
-    // États individuels en 0 (off) ou 1 (on)
     int kIlot = getSwitchBit(kitchenIlotSwitch)
     int kSpots = getSwitchBit(kitchenSpotsSwitch)
     int kCab = getSwitchBit(kitchenUnderCabSwitch)
@@ -219,7 +213,7 @@ def recordEvent(String zone, String triggerType, String deviceName, String actio
     int livFoyer = getSwitchBit(livingFoyerSwitch)
     int livSpots = getSwitchBit(livingSpotsSwitch)
     
-    def csvLine = "${dateStr};${dayOfWeek};${timeStr};${decHour};${zone};${triggerType};${deviceName};${actionValue};${currentMode};${luxBack};${luxFront};${kIlot};${kSpots};${kCab};${kTotal};${fam};${din};${livFoyer};${livSpots}"
+    def csvLine = "${dateStr};${dayOfWeek};${timeStr};${decHour};${zone};${triggerType};${deviceName};${actionValue};${currentMode};${luxBack};${luxFront};${cloudCover};${luxMeteo};${uvIndex};${extHum};${pressure};${kIlot};${kSpots};${kCab};${kTotal};${fam};${din};${livFoyer};${livSpots}"
     
     log.info("[DATA_LOG] ${csvLine}")
     
@@ -230,19 +224,17 @@ def recordEvent(String zone, String triggerType, String deviceName, String actio
     }
     state.logEntries = entries
     
-    // 1. Envoi asynchrone vers Google Forms (si activé)
     if (enableGoogleForm != false) {
         String activeUrl = settings.googlePrefilledUrl ?: getDefaultGoogleUrl()
         def valuesList = [
             zone, triggerType, deviceName, actionValue, "${currentMode}",
-            "${luxBack}", "${luxFront}",
+            "${luxBack}", "${luxFront}", "${cloudCover}", "${luxMeteo}", "${uvIndex}", "${extHum}", "${pressure}",
             "${kIlot}", "${kSpots}", "${kCab}", "${fam}",
             "${din}", "${livFoyer}", "${livSpots}"
         ]
         sendToGoogleForm(activeUrl, valuesList, csvLine)
     }
     
-    // 2. Sauvegarde dans le fichier CSV local (si activé)
     if (saveToFile) {
         appendToCsvFile(csvLine)
     }
