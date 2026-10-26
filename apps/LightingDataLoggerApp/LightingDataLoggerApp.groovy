@@ -60,7 +60,7 @@ def mainPage() {
         
         section("4. Options d'enregistrement & Fichier Local") {
             input "logLuxChanges", "bool", title: "Enregistrer aussi à chaque changement de Lux des capteurs Hue ?", defaultValue: true
-            input "logPeriodic", "bool", title: "Enregistrer un relevé automatique toutes les 15 minutes ?", defaultValue: true
+            input "logPeriodic", "bool", title: "Enregistrer un relevé automatique toutes les heures (60 minutes) ?", defaultValue: true
             input "saveToFile", "bool", title: "Sauvegarder AUSSI dans un fichier CSV local (File Manager) ?", defaultValue: false, submitOnChange: true
             if (settings.saveToFile) {
                 input "monthlyRotation", "bool", title: "Rotation mensuelle du fichier CSV (ex: lighting_data_2026-10.csv) ?", defaultValue: true
@@ -122,11 +122,10 @@ def initialize() {
         subscribe(hueFront, "illuminance", frontLuxHandler)
     }
     
-    // Relevé périodique aux 15 minutes
+// Relevé périodique fixé à 1 heure (60 minutes)
     if (logPeriodic) {
-        runEvery15Minutes(periodicHandler)
-    }
-    
+        runEvery1H(periodicHandler)
+    }    
     log.info("LightingDataLoggerApp initialisé (Google Form: ${enableGoogleForm}, CSV Local: ${saveToFile}).")
 }
 
