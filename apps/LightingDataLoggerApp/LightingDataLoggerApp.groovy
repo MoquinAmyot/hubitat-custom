@@ -75,17 +75,23 @@ def frontSwitchHandler(evt) { recordEvent("Avant", "SWITCH", evt.displayName, ev
 def periodicHandler() { recordEvent("Global", "TIMER_60M", "Horloge", "Snapshot") }
 
 // Retourne 0 si éteint, ou le niveau réel (1-100) si c'est un dimmer, ou 1/0 pour un switch simple
-def getSwitchLevelOrBit(dev) {
+def getSwitchLevelOrBit(dev, evt) {
     if (!dev) return 0
-    // Si l'interrupteur est éteint, on retourne 0 peu importe le "level" en mémoire
-    if (dev.currentValue("switch") != "on") return 0
     
-    // Si c'est un dimmer (possède l'attribut level), on retourne le niveau réel
+    // Si l'événement vient de cet appareil et concerne le switch, on regarde sa valeur en direct
+    if (evt && evt.device && evt.device.id == dev.id && evt.name == "switch") {
+        if (evt.value != "on") return 0
+    } else {
+        // Sinon (pour le snapshot horaire par exemple), on vérifie l'état actuel
+        if (dev.currentValue("switch") != "on") return 0
+    }
+    
+    // Si c'est un dimmer, on cherche son niveau actuel
     if (dev.hasAttribute("level")) {
         def lvl = dev.currentValue("level")
         return lvl != null ? (lvl as Integer) : 100
     }
-    return 1 // Pour un switch simple on/off sans dimmer
+    return 1
 }
 def parseGoogleFormUrl(String rawUrl) {
     def result = [valid: false, baseUrl: "", entries: []]
